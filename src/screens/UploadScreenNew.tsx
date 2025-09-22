@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker'; // still used for potential future media, not for docs
-import * as RNDocumentPicker from 'react-native-document-picker';
+import * as DocumentPicker from 'react-native-file-access';
 import { supabaseService } from '../services/supabase';
 import { 
   Material, 

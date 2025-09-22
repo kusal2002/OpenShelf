@@ -1720,7 +1720,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-image-picker (5.7.0):
+  - react-native-image-picker (5.6.0):
     - RCT-Folly
     - RCTRequired
     - RCTTypeSafety
@@ -2380,7 +2380,7 @@ PODS:
     - Yoga
   - RNFS (2.20.0):
     - React-Core
-  - RNScreens (4.15.4):
+  - RNScreens (4.15.3):
     - boost
     - DoubleConversion
     - fast_float
@@ -2407,10 +2407,10 @@ PODS:
     - ReactCodegen
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
-    - RNScreens/common (= 4.15.4)
+    - RNScreens/common (= 4.15.3)
     - SocketRocket
     - Yoga
-  - RNScreens/common (4.15.4):
+  - RNScreens/common (4.15.3):
     - boost
     - DoubleConversion
     - fast_float
@@ -2792,7 +2792,7 @@ SPEC CHECKSUMS:
   React-logger: 04ce9229cb57db2c2a8164eaec1105f89da7fb22
   React-Mapbuffer: e402e7a0535b2213c50727553621480fe8cd8ade
   React-microtasksnativemodule: a63ce5595016996a9bac1f10c70a7a7fe6506649
-  react-native-image-picker: c400108a3378c35793171241475de99569a6d277
+  react-native-image-picker: 696d43cf9f9042195b8b56991fd5934b47b646f3
   react-native-netinfo: cec9c4e86083cb5b6aba0e0711f563e2fbbff187
   react-native-safe-area-context: c6e2edd1c1da07bdce287fa9d9e60c5f7b514616
   React-NativeModulesApple: b3766e1f87b08064ebc459b9e1538da2447ca874
@@ -2828,7 +2828,7 @@ SPEC CHECKSUMS:
   ReactNativeFileAccess: 2a0fb9ca57b6a5ca139d860757e7c1b1edd367b0
   RNCAsyncStorage: 29f0230e1a25f36c20b05f65e2eb8958d6526e82
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
-  RNScreens: db22525a8ed56bb87ab038b8f03a050bf40e6ed8
+  RNScreens: 83be436fa9efeb1ea225e11243d4c4d0655d7e00
   RNSVG: 6f39605a4c4d200b11435c35bd077553c6b5963a
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: 00013dd9cde63a2d98e8002fcc4f5ddb66c10782
