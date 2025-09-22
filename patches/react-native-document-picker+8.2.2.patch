@@ -1,0 +1,74 @@
+diff --git a/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/DocumentPickerModule.java b/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/DocumentPickerModule.java
+index 3c8ce5d..ff47028 100644
+--- a/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/DocumentPickerModule.java
++++ b/node_modules/react-native-document-picker/android/src/main/java/com/reactnativedocumentpicker/DocumentPickerModule.java
+@@ -18,7 +18,8 @@ import androidx.annotation.NonNull;
+ import com.facebook.react.bridge.ActivityEventListener;
+ import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.BaseActivityEventListener;
+-import com.facebook.react.bridge.GuardedResultAsyncTask;
++// GuardedResultAsyncTask removed in newer React Native versions. Use AsyncTask instead.
++import android.os.AsyncTask;
+ import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactApplicationContext;
+ import com.facebook.react.bridge.ReactContext;
+@@ -215,7 +216,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
+           return;
+         }
+ 
+-        new ProcessDataTask(getReactApplicationContext(), uris, copyTo, promise).execute();
++  new ProcessDataTask(getReactApplicationContext(), uris, copyTo, promise).execute();
+       } catch (Exception e) {
+         sendError(E_UNEXPECTED_EXCEPTION, e.getLocalizedMessage(), e);
+       }
+@@ -224,14 +225,14 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
+     }
+   }
+ 
+-  private static class ProcessDataTask extends GuardedResultAsyncTask<ReadableArray> {
++  private static class ProcessDataTask extends AsyncTask<Void, Void, ReadableArray> {
+     private final WeakReference<Context> weakContext;
+     private final List<Uri> uris;
+     private final String copyTo;
+     private final Promise promise;
++    private Exception backgroundException;
+ 
+     protected ProcessDataTask(ReactContext reactContext, List<Uri> uris, String copyTo, Promise promise) {
+-      super(reactContext.getExceptionHandler());
+       this.weakContext = new WeakReference<>(reactContext.getApplicationContext());
+       this.uris = uris;
+       this.copyTo = copyTo;
+@@ -239,17 +240,26 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
+     }
+ 
+     @Override
+-    protected ReadableArray doInBackgroundGuarded() {
+-      WritableArray results = Arguments.createArray();
+-      for (Uri uri : uris) {
+-        results.pushMap(getMetadata(uri));
++    protected ReadableArray doInBackground(Void... voids) {
++      try {
++        WritableArray results = Arguments.createArray();
++        for (Uri uri : uris) {
++          results.pushMap(getMetadata(uri));
++        }
++        return results;
++      } catch (Exception e) {
++        backgroundException = e;
++        return Arguments.createArray();
+       }
+-      return results;
+     }
+ 
+     @Override
+-    protected void onPostExecuteGuarded(ReadableArray readableArray) {
+-      promise.resolve(readableArray);
++    protected void onPostExecute(ReadableArray readableArray) {
++      if (backgroundException != null) {
++        promise.reject("E_PROCESSING_FAILED", backgroundException.getLocalizedMessage(), backgroundException);
++      } else {
++        promise.resolve(readableArray);
++      }
+     }
+ 
+     private WritableMap getMetadata(Uri uri) {
