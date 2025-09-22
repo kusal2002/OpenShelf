@@ -19,8 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker';
-
+import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker'; // still used for potential future media, not for docs
+import * as RNDocumentPicker from 'react-native-document-picker';
 import { supabaseService } from '../services/supabase';
 import { 
   Material, 
@@ -30,17 +30,7 @@ import {
   FormErrors,
   UploadProgress
 } from '../types';
-import {
-  FileUtils,
-  ValidationUtils,
-  UIUtils,
-  UIComponents,
-  ErrorHandler,
-  NetworkUtils,
-  THEME_COLORS,
-  UI_CONSTANTS,
-  MATERIAL_CATEGORIES,
-} from '../utils';
+import { FileUtils, ValidationUtils, UIUtils, UIComponents, ErrorHandler, NetworkUtils, THEME_COLORS, UI_CONSTANTS, MATERIAL_CATEGORIES } from '../utils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -62,16 +52,9 @@ interface UploadForm {
   isPublic: boolean;
 }
 
-// Enhanced Document Picker with real and demo file support
-const DocumentPicker = {
-  types: {
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    all: '*/*',
-  },
-  
-  pickSingle: async (options: any): Promise<DocumentPickerResponse> => {
+// Wrapper to provide same interface pattern but using real document picker for actual files
+const InAppDocumentPicker = {
+  pickSingle: async (): Promise<DocumentPickerResponse> => {
     return new Promise((resolve, reject) => {
       Alert.alert(
         '📚 Add Study Material',
@@ -83,14 +66,40 @@ const DocumentPicker = {
             onPress: () => showDemoFilePicker(resolve, reject),
           },
           {
-            text: '📱 Real Files',
-            onPress: () => showRealFilePicker(resolve, reject),
+            text: '� Real File',
+            onPress: async () => {
+              try {
+                const res = await RNDocumentPicker.pickSingle({
+                  type: [
+                    RNDocumentPicker.types.pdf,
+                    RNDocumentPicker.types.doc,
+                    RNDocumentPicker.types.docx,
+                  ],
+                  copyTo: 'cachesDirectory',
+                  mode: 'import',
+                  presentationStyle: 'fullScreen',
+                });
+                resolve({
+                  uri: res.fileCopyUri || res.uri,
+                  fileCopyUri: res.fileCopyUri || undefined,
+                  type: res.type || 'application/octet-stream',
+                  name: res.name || 'document',
+                  size: res.size || 0,
+                });
+              } catch (e: any) {
+                if (RNDocumentPicker.isCancel(e)) {
+                  reject(new Error('User canceled'));
+                } else {
+                  console.error('Document pick error:', e);
+                  reject(e);
+                }
+              }
+            },
           },
         ]
       );
     });
   },
-  
   isCancel: (error: any) => error.message === 'User canceled',
 };
 
@@ -149,34 +158,7 @@ const showDemoFilePicker = (resolve: Function, reject: Function) => {
   );
 };
 
-const showRealFilePicker = (resolve: Function, reject: Function) => {
-  // Using image picker as placeholder for document picker
-  // In production, you would use a proper document picker library
-  const imagePickerOptions = {
-    mediaType: 'mixed' as MediaType,
-    includeBase64: false,
-    maxHeight: 2000,
-    maxWidth: 2000,
-  };
-
-  launchImageLibrary(imagePickerOptions, (response: ImagePickerResponse) => {
-    if (response.didCancel) {
-      reject(new Error('User canceled'));
-    } else if (response.errorMessage) {
-      reject(new Error(response.errorMessage));
-    } else if (response.assets && response.assets[0]) {
-      const asset = response.assets[0];
-      resolve({
-        uri: asset.uri || '',
-        type: asset.type || 'application/octet-stream',
-        name: asset.fileName || 'document.pdf',
-        size: asset.fileSize || 0,
-      });
-    } else {
-      reject(new Error('No file selected'));
-    }
-  });
-};
+// Removed old showRealFilePicker using image library (no longer needed)
 
 export const UploadScreen: React.FC<Props> = ({ navigation }) => {
   const [form, setForm] = useState<UploadForm>({
@@ -225,10 +207,7 @@ export const UploadScreen: React.FC<Props> = ({ navigation }) => {
 
   const selectFile = async () => {
     try {
-      const result = await DocumentPicker.pickSingle({
-        type: [DocumentPicker.types.pdf, DocumentPicker.types.doc, DocumentPicker.types.docx],
-        copyTo: 'cachesDirectory',
-      });
+      const result = await InAppDocumentPicker.pickSingle();
 
       setSelectedFile(result);
       
@@ -244,7 +223,7 @@ export const UploadScreen: React.FC<Props> = ({ navigation }) => {
       }
 
     } catch (error) {
-      if (!DocumentPicker.isCancel(error)) {
+      if (!InAppDocumentPicker.isCancel(error)) {
         console.error('File selection error:', error);
         UIUtils.showAlert('Error', 'Failed to select file. Please try again.');
       }
