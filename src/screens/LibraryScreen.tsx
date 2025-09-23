@@ -104,64 +104,37 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     { key: 'research', label: 'Research', icon: '🔬' },
     { key: 'reference', label: 'References', icon: '🔗' },
     { key: 'other', label: 'Other', icon: '📄' },
-  ];
+];
 
-  // Performance-optimized data fetching
-  const fetchUserMaterials = useCallback(async (showRefresh = false) => {
-    try {
-      setLoading(prev => ({ ...prev, refresh: showRefresh, initial: !showRefresh }));
-      
-      if (!user?.id) {
-        throw new Error('User not authenticated');
-      }
-
-      // For now, create mock data to show the UI working
-      const mockMaterials: Material[] = [
-        {
-          id: '1',
-          title: 'Computer Science Fundamentals',
-          description: 'Introduction to computer science concepts',
-          category: 'Computer Science',
-          file_url: 'https://example.com/file1.pdf',
-          file_name: 'cs_fundamentals.pdf',
-          file_size: 2500000,
-          file_type: 'pdf',
-          is_public: true,
-          download_count: 25,
-          created_at: '2024-01-15T00:00:00Z',
-          updated_at: '2024-01-15T00:00:00Z',
-          user_id: user.id,
-          tags: ['computer-science', 'fundamentals'],
-        },
-        {
-          id: '2', 
-          title: 'Mathematics Notes',
-          description: 'Advanced calculus study notes',
-          category: 'Mathematics',
-          file_url: 'https://example.com/file2.pdf',
-          file_name: 'math_notes.pdf',
-          file_size: 1800000,
-          file_type: 'pdf',
-          is_public: false,
-          download_count: 12,
-          created_at: '2024-01-10T00:00:00Z',
-          updated_at: '2024-01-10T00:00:00Z',
-          user_id: user.id,
-          tags: ['mathematics', 'calculus'],
-        },
-      ];
-
-      setMaterials(mockMaterials);
-      
-    } catch (error) {
-      console.error('Error fetching materials:', error);
-      Alert.alert('Error', 'Failed to load materials. Please try again.');
-    } finally {
-      setLoading(prev => ({ ...prev, initial: false, refresh: false }));
+// Performance-optimized data fetching
+const fetchUserMaterials = useCallback(async (isRefresh = false) => {
+  if (!user?.id) return;
+  setLoading(prev => ({
+    ...prev,
+    initial: prev.initial && !isRefresh,
+    refresh: isRefresh,
+  }));
+  try {
+    const response = await supabaseService.getUserMaterials(user.id);
+    if (response.success && response.data) {
+      setMaterials(response.data);
+    } else {
+      console.error('Failed to fetch user materials:', response.error);
+      Alert.alert('Error', response.error || 'Failed to load materials');
     }
-  }, [user]);
+  } catch (error) {
+    console.error('Unexpected error fetching materials:', error);
+    Alert.alert('Error', 'An unexpected error occurred while loading materials');
+  } finally {
+    setLoading(prev => ({
+      ...prev,
+      initial: false,
+      refresh: false,
+    }));
+  }
+}, [user?.id]);
 
-  // Advanced search and filtering
+// Advanced search and filtering
   const applyFiltersAndSearch = useCallback(() => {
     let result = materials;
 
@@ -278,24 +251,23 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   };
 
   // Component lifecycle
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        // Mock user for demo
-        setUser({
-          id: 'demo-user-id',
-          email: 'demo@university.edu',
-          name: 'Demo Student',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error('Error getting current user:', error);
+useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      const response = await supabaseService.getCurrentUser();
+      if (response.success && response.data) {
+        setUser(response.data);  // real Supabase AuthUser with UUID
+      } else {
+        console.error('No logged-in user:', response.error);
+        Alert.alert('Error', 'Please log in to view your library');
       }
-    };
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+  };
 
-    getCurrentUser();
-  }, []);
+  fetchUser();
+}, []);
 
   useEffect(() => {
     if (user?.id) {
