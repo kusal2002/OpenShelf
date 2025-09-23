@@ -79,14 +79,14 @@ let savedInPublicDir = false;
 if (Platform.OS === 'ios') {
   dir = RNFS.DocumentDirectoryPath; // iOS sandbox docs
 } else {
-  if (permissionGranted && RNFS.DownloadDirectoryPath) {
-    dir = RNFS.DownloadDirectoryPath;
-    try { await RNFS.mkdir(dir); } catch {}
-    savedInPublicDir = true;
-  } else {
-    dir = RNFS.ExternalDirectoryPath || RNFS.DocumentDirectoryPath;
-    savedInPublicDir = false;
-  }
+  if (Platform.OS === 'android' && RNFS.DownloadDirectoryPath) {
+  // Force use of system Downloads folder
+  dir = RNFS.DownloadDirectoryPath;
+  try { await RNFS.mkdir(dir); } catch {}
+  savedInPublicDir = true;
+} else {
+  dir = RNFS.DocumentDirectoryPath;
+}
 }
 
 // Final path
