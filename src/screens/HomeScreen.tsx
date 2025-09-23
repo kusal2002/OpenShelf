@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-
+import { downloadFile } from '../utils';
 import { supabaseService } from '../services/supabase';
 import { 
   Material, 
@@ -161,29 +161,54 @@ export const HomeScreenold = ({ navigation }: Props) => {
         return;
       }
 
+      // First confirmation
       Alert.alert(
-        '📥 Download Material',
-        `Download "${material.title}"?`,
+        'Download Material',
+        `Do you want to download "${material.title}" to your device for offline access?`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'No', style: 'cancel' },
           {
-            text: 'Download',
-            onPress: async () => {
-              try {
-                // Update download count
-                await supabaseService.updateDownloadCount(material.id);
-                
-                // In a real app, you would implement actual file download
-                UIUtils.showAlert(
-                  '✅ Download Started',
-                  `"${material.title}" is being downloaded to your device.`
-                );
-              } catch (error) {
-                ErrorHandler.handle(error, 'Download error');
-                UIUtils.showAlert('Error', 'Failed to download material. Please try again.');
-              }
-            },
-          },
+            text: 'Yes',
+            onPress: () => {
+              // Second confirmation (explicit consent to store locally)
+              Alert.alert(
+                'Confirm Download',
+                'This file will be saved on your device storage. Continue?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Download',
+                    onPress: async () => {
+                      try {
+                        // Derive a path inside bucket from material.file_url if possible
+                        // Assuming file_url might be a public URL or signed; try to extract last segment
+                        const rawName = material.file_name || material.title;
+                        let storagePath = '';
+                        if (material.file_url) {
+                          const parts = material.file_url.split('?')[0].split('/');
+                          storagePath = parts.slice(-1)[0];
+                        }
+                        const desiredName = rawName.includes('.') ? rawName : `${rawName}.${material.file_type}`;
+
+                        // Start download
+                        const res = await downloadFile(storagePath || material.file_url, desiredName);
+
+                        if (res.success) {
+                          await supabaseService.updateDownloadCount(material.id);
+                          UIUtils.showAlert('Download Complete', `Saved to: ${res.localPath}`);
+                        } else {
+                          UIUtils.showAlert('Download Failed', res.error || 'Unknown error');
+                        }
+                      } catch (err) {
+                        ErrorHandler.handle(err, 'Download error');
+                        UIUtils.showAlert('Error', 'Failed to download material. Please try again.');
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
         ]
       );
     } catch (error) {
@@ -274,10 +299,8 @@ export const HomeScreenold = ({ navigation }: Props) => {
   );
 
   const renderMaterialCard = ({ item }: { item: Material }) => (
-    <TouchableOpacity
+    <View
       style={styles.materialCard}
-      onPress={() => downloadMaterial(item)}
-      activeOpacity={0.7}
     >
       <View style={styles.materialHeader}>
         <View style={styles.materialIcon}>
@@ -322,15 +345,13 @@ export const HomeScreenold = ({ navigation }: Props) => {
           {DateUtils.getRelativeTime(item.created_at)}
         </Text>
         <View style={styles.downloadInfo}>
-          <Text style={styles.downloadCount}>
-            📥 {item.download_count || 0}
-          </Text>
-          <TouchableOpacity style={styles.downloadButton}>
+          <Text style={styles.downloadCount}>📥 {item.download_count || 0}</Text>
+          <TouchableOpacity style={styles.downloadButton} onPress={() => downloadMaterial(item)}>
             <Text style={styles.downloadButtonText}>Download</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 
   const renderEmptyState = () => (

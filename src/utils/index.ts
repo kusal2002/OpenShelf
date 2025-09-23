@@ -4,6 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { downloadFile } from '../utils';
 import { Alert, Platform } from 'react-native';
 import { Material, MaterialCategory, ValidationError, FormErrors } from '../types';
 
@@ -68,6 +69,17 @@ export class CacheManager {
     }
   }
 
+
+static async handleDownload(material: any) {
+  const result = await downloadFile(material.file_path, `${material.title}.pdf`, 'study-materials', { share: false });
+  if (result.success) {
+    // Show success toast / alert
+    console.log('Saved to', result.localPath);
+  } else {
+    console.warn('Download failed:', result.error);
+  }
+}
+
   /**
    * Get cache size in bytes
    */
@@ -75,7 +87,6 @@ export class CacheManager {
     try {
       const keys = await AsyncStorage.getAllKeys();
       let totalSize = 0;
-      
       for (const key of keys) {
         const value = await AsyncStorage.getItem(key);
         if (value) {
@@ -778,6 +789,9 @@ export class ErrorHandler {
     return defaultMessage;
   }
 }
+
+export { downloadFile } from './download';
+export type { DownloadResult } from './download';
 
 export default {
   CacheManager,

@@ -20,8 +20,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { launchImageLibrary, ImagePickerResponse, MediaType } from 'react-native-image-picker';
-
+import { FileSystem } from 'react-native-file-access';
+import DocumentPicker from 'react-native-document-picker';
 import { supabaseService } from '../services/supabase';
+// Removed duplicate Platform import (already imported above) and unused PermissionsAndroid.
+
+// Extract types from default export (react-native-document-picker v8 uses static properties)
+const DocumentPickerTypes = DocumentPicker.types;
 import { 
   Material, 
   MainTabParamList, 
@@ -61,16 +66,16 @@ interface UploadForm {
   tags: string;
   isPublic: boolean;
 }
-
 // Enhanced Document Picker with real and demo file support
-const DocumentPicker = {
+// Requires: npm install react-native-document-picker
+const MaterialPicker = {
   types: {
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    all: '*/*',
+    pdf: DocumentPickerTypes.pdf,
+    doc: DocumentPickerTypes.doc,
+    docx: DocumentPickerTypes.docx,
+    all: DocumentPickerTypes.allFiles,
   },
-  
+
   pickSingle: async (options: any): Promise<DocumentPickerResponse> => {
     return new Promise((resolve, reject) => {
       Alert.alert(
@@ -83,15 +88,17 @@ const DocumentPicker = {
             onPress: () => showDemoFilePicker(resolve, reject),
           },
           {
-            text: '📱 Real Files',
-            onPress: () => showRealFilePicker(resolve, reject),
+            text: '📱 Real File',
+            onPress: () => {
+              showRealFilePicker(resolve, reject).catch(err => reject(err));
+            },
           },
         ]
       );
     });
   },
-  
-  isCancel: (error: any) => error.message === 'User canceled',
+
+  isCancel: (error: any) => DocumentPicker.isCancel(error) || error?.message === 'User canceled',
 };
 
 const showDemoFilePicker = (resolve: Function, reject: Function) => {
@@ -149,36 +156,30 @@ const showDemoFilePicker = (resolve: Function, reject: Function) => {
   );
 };
 
-const showRealFilePicker = (resolve: Function, reject: Function) => {
-  // Using image picker as placeholder for document picker
-  // In production, you would use a proper document picker library
-  const imagePickerOptions = {
-    mediaType: 'mixed' as MediaType,
-    includeBase64: false,
-    maxHeight: 2000,
-    maxWidth: 2000,
-  };
-
-  launchImageLibrary(imagePickerOptions, (response: ImagePickerResponse) => {
-    if (response.didCancel) {
+const showRealFilePicker = async (resolve: Function, reject: Function) => {
+  try {
+    const res = await DocumentPicker.pickSingle({
+      type: [DocumentPickerTypes.pdf, DocumentPickerTypes.doc, DocumentPickerTypes.docx],
+      copyTo: 'cachesDirectory',
+    });
+    resolve({
+      uri: (res as any).fileCopyUri || res.uri,
+      fileCopyUri: (res as any).fileCopyUri || res.uri,
+      type: res.type || 'application/octet-stream',
+      name: res.name || 'document',
+      size: res.size || 0,
+    });
+  } catch (err) {
+    if (DocumentPicker.isCancel(err)) {
       reject(new Error('User canceled'));
-    } else if (response.errorMessage) {
-      reject(new Error(response.errorMessage));
-    } else if (response.assets && response.assets[0]) {
-      const asset = response.assets[0];
-      resolve({
-        uri: asset.uri || '',
-        type: asset.type || 'application/octet-stream',
-        name: asset.fileName || 'document.pdf',
-        size: asset.fileSize || 0,
-      });
     } else {
-      reject(new Error('No file selected'));
+      reject(err);
     }
-  });
+  }
 };
 
-export const UploadScreen = ({ navigation }: Props) => {
+// Main component
+const UploadScreen: React.FC<Props> = ({ navigation }) => {
   const [form, setForm] = useState<UploadForm>({
     title: '',
     description: '',
@@ -222,34 +223,36 @@ export const UploadScreen = ({ navigation }: Props) => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
   const selectFile = async () => {
     try {
       const result = await DocumentPicker.pickSingle({
-        type: [DocumentPicker.types.pdf, DocumentPicker.types.doc, DocumentPicker.types.docx],
+        type: [DocumentPickerTypes.pdf, DocumentPickerTypes.doc, DocumentPickerTypes.docx],
         copyTo: 'cachesDirectory',
       });
 
-      setSelectedFile(result);
-      
-      // Auto-fill title from filename if title is empty
-      if (!form.title.trim() && result.name) {
-        const titleFromFile = result.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      const normalized: DocumentPickerResponse = {
+        uri: (result as any).fileCopyUri || result.uri,
+        fileCopyUri: (result as any).fileCopyUri || result.uri,
+        type: result.type || 'application/octet-stream',
+        name: result.name || 'document',
+        size: result.size || 0,
+      };
+      setSelectedFile(normalized);
+
+      if (!form.title.trim() && normalized.name) {
+        const titleFromFile = normalized.name.replace(/\.[^/.]+$/, '');
         setForm(prev => ({ ...prev, title: titleFromFile }));
       }
-
-      // Auto-fill form fields for demo files
-      if (result.uri.startsWith('demo://')) {
-        autoFillDemoFileData(result);
-      }
-
     } catch (error) {
       if (!DocumentPicker.isCancel(error)) {
-        console.error('File selection error:', error);
-        UIUtils.showAlert('Error', 'Failed to select file. Please try again.');
+        ErrorHandler.handle(error, 'File selection error');
+        UIUtils.showAlert('Selection Error', 'Could not select file. Please try again.');
       }
     }
   };
+
+
+    let autoTags = '';
 
   const autoFillDemoFileData = (file: DocumentPickerResponse) => {
     const fileName = file.name.toLowerCase();
@@ -263,7 +266,7 @@ export const UploadScreen = ({ navigation }: Props) => {
       autoTags = 'calculus, mathematics, derivatives, integrals, limits, advanced, multivariable';
     } else if (fileName.includes('quantum') || fileName.includes('physics')) {
       autoCategory = 'Physics';
-      autoDescription = 'In-depth exploration of quantum mechanics principles, covering wave functions, quantum states, uncertainty principle, and modern physics applications.';
+      autoDescription = 'Introduction to quantum physics covering wave-particle duality, Schrödinger equation, uncertainty principle, and foundational concepts.';
       autoTags = 'quantum mechanics, physics, wave functions, modern physics, uncertainty principle';
     } else if (fileName.includes('literature') || fileName.includes('world')) {
       autoCategory = 'Literature';
@@ -279,19 +282,15 @@ export const UploadScreen = ({ navigation }: Props) => {
       autoTags = 'organic chemistry, reactions, mechanisms, synthesis, molecular structures';
     }
 
-    setForm(prev => ({ 
-      ...prev, 
+    setForm(prev => ({
+      ...prev,
       category: autoCategory,
       description: prev.description || autoDescription,
       tags: prev.tags || autoTags
     }));
   };
-
   const removeFile = () => {
     setSelectedFile(null);
-    const newErrors = { ...errors };
-    delete newErrors.file;
-    setErrors(newErrors);
   };
 
   const handleUpload = async () => {
