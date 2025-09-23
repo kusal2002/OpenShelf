@@ -582,7 +582,7 @@ useEffect(() => {
       {loading.action && (
         <View style={styles.actionLoading}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.actionLoadingText}>Processing...</Text>
+            <Text style={styles.actionLoadingText}>Processing...</Text>
         </View>
       )}
 
@@ -619,6 +619,15 @@ useEffect(() => {
 
       {renderSortModal()}
       {renderActionsModal()}
+
+      {materials.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('Upload', { defaultCategory: selectedCategory } as any)}
+        >
+          <Text style={styles.fabIcon}>＋</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
@@ -1005,14 +1014,35 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: colors.gray200,
-  },
+    borderTopColor: colors.gray200},
   modalCloseText: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
   },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    backgroundColor: colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  fabIcon: {
+    fontSize: 28,
+    color: colors.white,
+    lineHeight: 28,
+  },
 });
+;
 
 export default LibraryScreen;
 
