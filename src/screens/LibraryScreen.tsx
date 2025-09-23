@@ -78,6 +78,8 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     action: false
   });
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // Enhanced UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -475,71 +477,130 @@ useEffect(() => {
   );
 
   const renderMaterialCard = ({ item }: { item: Material }) => (
+  <View
+    style={[
+      styles.materialCard,
+      isGridView && styles.materialCardGrid
+    ]}
+  >
+    {/* Card Header */}
+    <View style={styles.cardHeader}>
+      <Text style={styles.categoryBadge}>
+        {categories.find(c => c.key === item.category)?.icon || '📄'} {item.category}
+      </Text>
+      
+      {/* Triple Dots Menu */}
+      <TouchableOpacity
+        style={styles.cardMenu}
+        onPress={() => {
+          setSelectedMaterial(item);
+          setShowActionsModal(true); // show modal with actions
+        }}
+      >
+        <Text style={styles.cardMenuIcon}>⋮</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Touchable content area (Preview) */}
     <TouchableOpacity
-      style={[
-        styles.materialCard,
-        isGridView && styles.materialCardGrid
-      ]}
+      style={styles.cardContent}
+      activeOpacity={0.85}
       onPress={() => {
-        setSelectedMaterial(item);
-        setShowActionsModal(true);
+        setPreviewMaterial(item);
+        setShowPreviewModal(true);
       }}
     >
-      {/* Card Header */}
-      <View style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <Text style={styles.categoryBadge}>
-            {categories.find(c => c.key === item.category)?.icon || '📄'} {item.category}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.cardMenu}
-          onPress={() => {
-            setSelectedMaterial(item);
-            setShowActionsModal(true);
-          }}
-        >
-          <Text style={styles.cardMenuIcon}>⋮</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Card Content */}
-      <View style={styles.cardContent}>
-        <Text style={styles.materialTitle} numberOfLines={2}>
-          {item.title}
+      <Text style={styles.materialTitle} numberOfLines={2}>
+        {item.title}
+      </Text>
+      {item.description && (
+        <Text style={styles.materialDescription} numberOfLines={2}>
+          {item.description}
         </Text>
-        {item.description && (
-          <Text style={styles.materialDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-      </View>
-
-      {/* Card Footer */}
-      <View style={styles.cardFooter}>
-        <View style={styles.cardStats}>
-          <Text style={styles.statText}>📥 {item.download_count || 0}</Text>
-          <Text style={styles.statText}>📏 {(item.file_size / 1000000).toFixed(1)} MB</Text>
-        </View>
-        <Text style={styles.uploadDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.cardActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.primaryButton]}
-          onPress={() => handleDownloadMaterial(item)}
-        >
-          <Text style={styles.primaryButtonText}>Download</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.secondaryButton]}
-          onPress={() => handleShareMaterial(item)}
-        >
-          <Text style={styles.secondaryButtonText}>Share</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </TouchableOpacity>
+
+    {/* Card Footer */}
+    <View style={styles.cardFooter}>
+      <Text style={styles.statText}>📥 {item.download_count || 0}</Text>
+      <Text style={styles.statText}>📏 {(item.file_size / 1000000).toFixed(1)} MB</Text>
+      <Text style={styles.uploadDate}>
+        {new Date(item.created_at).toLocaleDateString()}
+      </Text>
+    </View>
+
+    {/* Action Buttons */}
+    <View style={styles.cardActions}>
+      <TouchableOpacity
+        style={[styles.actionButton, styles.primaryButton]}
+        onPress={() => handleDownloadMaterial(item)}
+      >
+        <Text style={styles.primaryButtonText}>Download</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.actionButton, styles.secondaryButton]}
+        onPress={() => handleShareMaterial(item)}
+      >
+        <Text style={styles.secondaryButtonText}>Share</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+);
+
+  const renderPreviewModal = () => (
+    <Modal
+      visible={showPreviewModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowPreviewModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle} numberOfLines={2}>
+            {previewMaterial?.title || 'Material Preview'}
+          </Text>
+          <View style={styles.divider} />
+          <ScrollView style={{ maxHeight: height * 0.4, paddingHorizontal: 20, paddingTop: 12 }}>
+            {previewMaterial?.description && (
+              <Text style={[styles.materialDescription, { marginBottom: 12 }]}>${'{'}previewMaterial.description{'}'}</Text>
+            )}
+            <Text style={styles.optionText}>Category: {previewMaterial?.category}</Text>
+            <Text style={styles.optionText}>Size: {previewMaterial ? (previewMaterial.file_size / 1_000_000).toFixed(2) : '--'} MB</Text>
+            <Text style={styles.optionText}>Uploaded: {previewMaterial ? new Date(previewMaterial.created_at).toLocaleDateString() : '--'}</Text>
+            {previewMaterial?.download_count != null && (
+              <Text style={styles.optionText}>Downloads: {previewMaterial.download_count}</Text>
+            )}
+          </ScrollView>
+          <View style={{ flexDirection: 'row', gap: 12, padding: 20, paddingTop: 8 }}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryButton]}
+              onPress={() => {
+                if (previewMaterial) handleDownloadMaterial(previewMaterial);
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Download</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.secondaryButton]}
+              onPress={() => {
+                if (previewMaterial) handleShareMaterial(previewMaterial);
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>Share</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => {
+              setShowPreviewModal(false);
+              setPreviewMaterial(null);
+            }}
+          >
+            <Text style={styles.modalCloseText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 
   const renderLoadingState = () => (
@@ -551,14 +612,19 @@ useEffect(() => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>📚</Text>
+      <Text style={styles.emptyIcon}>📂</Text>
       <Text style={styles.emptyTitle}>No materials found</Text>
       <Text style={styles.emptyMessage}>
-        {searchQuery.trim() 
-          ? `No materials match "${searchQuery}"`
-          : 'Start by uploading your first study material!'
-        }
+        {searchQuery
+          ? 'Try adjusting your search or filters.'
+          : 'Upload your first study material to get started.'}
       </Text>
+      <TouchableOpacity
+        style={styles.uploadButton}
+        onPress={() => setShowUploadModal(true)}
+      >
+        <Text style={styles.uploadButtonText}>Upload Material</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -615,6 +681,7 @@ useEffect(() => {
 
       {renderSortModal()}
       {renderActionsModal()}
+  {renderPreviewModal()}
       {materials.length > 0 && (
         <TouchableOpacity style={styles.fab} onPress={() => setShowUploadModal(true)}>
           <Text style={styles.fabIcon}>＋</Text>
