@@ -29,6 +29,7 @@ import {
   LoadingState,
   AuthUser 
 } from '../types';
+import UploadMaterialModal from '../components/UploadMaterialModal';
 // Simple modern color scheme
 const colors = {
   primary: '#3B82F6',
@@ -82,10 +83,11 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all'>('all');
   const [sortBy, setSortBy] = useState<'title' | 'date' | 'category' | 'downloads'>('date');
-  const [isGridView, setIsGridView] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [isGridView, setIsGridView] = useState(false);
 
   // Enhanced filtering and sorting options
   const sortOptions: SortOption[] = [
@@ -557,12 +559,6 @@ useEffect(() => {
           : 'Start by uploading your first study material!'
         }
       </Text>
-      <TouchableOpacity
-        style={styles.uploadButton}
-        onPress={() => navigation.navigate('Upload')}
-      >
-        <Text style={styles.uploadButtonText}>+ Upload Material</Text>
-      </TouchableOpacity>
     </View>
   );
 
@@ -619,15 +615,21 @@ useEffect(() => {
 
       {renderSortModal()}
       {renderActionsModal()}
-
       {materials.length > 0 && (
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => navigation.navigate('Upload', { defaultCategory: selectedCategory } as any)}
-        >
+        <TouchableOpacity style={styles.fab} onPress={() => setShowUploadModal(true)}>
           <Text style={styles.fabIcon}>＋</Text>
         </TouchableOpacity>
       )}
+      <UploadMaterialModal
+        visible={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        userId={user?.id || ''}
+        category={selectedCategory === 'all' ? 'Other' : selectedCategory}
+        onUploaded={() => {
+          setShowUploadModal(false);
+          fetchUserMaterials();
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -1042,7 +1044,6 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
 });
-;
 
 export default LibraryScreen;
 
