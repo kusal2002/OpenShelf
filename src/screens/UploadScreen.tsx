@@ -83,10 +83,7 @@ const MaterialPicker = {
         'Choose how you want to add a document:',
         [
           { text: 'Cancel', onPress: () => reject(new Error('User canceled')) },
-          {
-            text: '🎯 Demo Files',
-            onPress: () => showDemoFilePicker(resolve, reject),
-          },
+      
           {
             text: '📱 Real File',
             onPress: () => {
@@ -101,60 +98,7 @@ const MaterialPicker = {
   isCancel: (error: any) => DocumentPicker.isCancel(error) || error?.message === 'User canceled',
 };
 
-const showDemoFilePicker = (resolve: Function, reject: Function) => {
-  Alert.alert(
-    '📖 Demo Study Materials',
-    'Select a sample document to demonstrate the upload process:',
-    [
-      { text: 'Cancel', onPress: () => reject(new Error('User canceled')) },
-      {
-        text: '📐 Advanced Calculus',
-        onPress: () => resolve({
-          uri: 'demo://advanced-calculus.pdf',
-          type: 'application/pdf',
-          name: 'Advanced Calculus - Complete Guide.pdf',
-          size: 2048000,
-        }),
-      },
-      {
-        text: '⚛️ Quantum Physics',
-        onPress: () => resolve({
-          uri: 'demo://quantum-physics.pdf',
-          type: 'application/pdf',
-          name: 'Quantum Physics - Theory and Applications.pdf',
-          size: 3125000,
-        }),
-      },
-      {
-        text: '📚 World Literature',
-        onPress: () => resolve({
-          uri: 'demo://world-literature.pdf',
-          type: 'application/pdf',
-          name: 'World Literature - Classical Works Analysis.pdf',
-          size: 1750000,
-        }),
-      },
-      {
-        text: '🎨 Renaissance Art',
-        onPress: () => resolve({
-          uri: 'demo://renaissance-art.pdf',
-          type: 'application/pdf',
-          name: 'Renaissance Art History - Masters and Movements.pdf',
-          size: 4096000,
-        }),
-      },
-      {
-        text: '🧪 Organic Chemistry',
-        onPress: () => resolve({
-          uri: 'demo://organic-chemistry.pdf',
-          type: 'application/pdf',
-          name: 'Organic Chemistry - Reactions and Mechanisms.pdf',
-          size: 2756000,
-        }),
-      },
-    ]
-  );
-};
+
 
 const showRealFilePicker = async (resolve: Function, reject: Function) => {
   try {
