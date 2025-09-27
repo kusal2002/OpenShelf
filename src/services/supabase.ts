@@ -460,16 +460,34 @@ class SupabaseService {
     try {
       const { data, error } = await supabase
         .from('materials')
-        .select('*')
+        .select(`
+          *,
+          users:user_id (
+            name
+          )
+        `)
         .eq('is_public', true)
         .order('created_at', { ascending: false })
         .range(page * limit, (page + 1) * limit - 1);
 
       if (error) {
+        console.error('Error fetching materials:', error);
         return { data: null, error: error.message, success: false };
       }
 
-      return { data: data || [], error: null, success: true };
+      console.log('Raw materials data sample:', data && data.length > 0 ? JSON.stringify(data[0]) : 'No data');
+      
+      // Transform the response to include uploader_name in the Material object
+      const materials = data?.map(item => {
+        console.log(`Processing item ${item.id}, users:`, item.users);
+        return {
+          ...item,
+          uploader_name: item.users?.name || 'Unknown',
+          users: undefined // Remove the nested users object
+        };
+      }) || [];
+
+      return { data: materials, error: null, success: true };
     } catch (error) {
       return {
         data: null,
@@ -486,7 +504,12 @@ class SupabaseService {
     try {
       const { data, error } = await supabase
         .from('materials')
-        .select('*')
+        .select(`
+          *,
+          users:user_id (
+            name
+          )
+        `)
         .eq('user_id', userId) 
         .order('created_at', { ascending: false });
 
@@ -494,7 +517,14 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
-      return { data: data || [], error: null, success: true };
+      // Transform the response to include uploader_name in the Material object
+      const materials = data?.map(item => ({
+        ...item,
+        uploader_name: item.users?.name || 'Unknown',
+        users: undefined // Remove the nested users object
+      })) || [];
+
+      return { data: materials, error: null, success: true };
     } catch (error) {
       return {
         data: null,
@@ -743,7 +773,12 @@ class SupabaseService {
       
       const { data: materials, error: materialsError } = await supabase
         .from('materials')
-        .select('*')
+        .select(`
+          *,
+          users:user_id (
+            name
+          )
+        `)
         .in('id', materialIds);
 
       if (materialsError) {
@@ -753,9 +788,11 @@ class SupabaseService {
 
       console.log('Bookmarked materials found:', materials?.length || 0);
       
-      // Mark all returned materials as bookmarked
+      // Mark all returned materials as bookmarked and include uploader name
       const bookmarkedMaterials = materials.map(material => ({
         ...material,
+        uploader_name: material.users?.name || 'Unknown',
+        users: undefined, // Remove the nested users object
         is_bookmarked: true
       }));
 

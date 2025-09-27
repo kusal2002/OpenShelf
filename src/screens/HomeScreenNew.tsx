@@ -289,6 +289,9 @@ function HomeScreen({ navigation }: Props) {
           <Text style={styles.materialTitle} numberOfLines={2}>
             {item.title}
           </Text>
+          <Text style={styles.uploaderName}>
+            👤 Uploaded by: {item.uploader_name || 'Unknown'}
+          </Text>
           <View style={styles.materialMeta}>
             <Text style={styles.materialCategory}>{item.category}</Text>
             <Text style={styles.materialSize}>
@@ -318,9 +321,11 @@ function HomeScreen({ navigation }: Props) {
       )}
 
       <View style={styles.materialFooter}>
-        <Text style={styles.materialDate}>
-          {DateUtils.getRelativeTime(item.created_at)}
-        </Text>
+        <View style={styles.footerInfo}>
+          <Text style={styles.materialDate}>
+            {DateUtils.getRelativeTime(item.created_at)}
+          </Text>
+        </View>
         <View style={styles.downloadInfo}>
           <Text style={styles.downloadCount}>
             📥 {item.download_count || 0}
@@ -660,9 +665,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: UI_CONSTANTS.spacing.xs,
   },
+  footerInfo: {
+    flexDirection: 'column',
+    gap: UI_CONSTANTS.spacing.xs / 2,
+  },
   materialDate: {
     ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textTertiary,
+  },
+  uploaderName: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.textSecondary,
+    marginTop: 2,
+    marginBottom: 4,
   },
   downloadInfo: {
     flexDirection: 'row',

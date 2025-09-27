@@ -50,6 +50,8 @@ export interface Material {
   local_path?: string;
   // Bookmark support
   is_bookmarked?: boolean;
+  // Uploader information
+  uploader_name?: string;
 }
 
 export type MaterialCategory = 

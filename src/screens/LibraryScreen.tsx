@@ -686,6 +686,7 @@ useEffect(() => {
       <Text style={styles.materialTitle} numberOfLines={2}>
         {item.title}
       </Text>
+      <Text style={styles.uploaderText}>👤 Uploaded by: {item.uploader_name || 'Unknown'}</Text>
       {item.description && (
         <Text style={styles.materialDescription} numberOfLines={2}>
           {item.description}
@@ -768,6 +769,7 @@ useEffect(() => {
               <Text style={[styles.materialDescription, styles.previewDescription]}>{previewMaterial.description}</Text>
             )}
             <Text style={styles.optionText}>Category: {previewMaterial?.category}</Text>
+            <Text style={styles.optionText}>Uploaded by: {previewMaterial?.uploader_name || 'Unknown'}</Text>
             <Text style={styles.optionText}>Size: {previewMaterial ? (previewMaterial.file_size / 1_000_000).toFixed(2) : '--'} MB</Text>
             <Text style={styles.optionText}>Uploaded: {previewMaterial ? new Date(previewMaterial.created_at).toLocaleDateString() : '--'}</Text>
             {previewMaterial?.download_count != null && (
@@ -1128,6 +1130,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.gray800,
+    marginBottom: 2,
+  },
+  uploaderText: {
+    fontSize: 13,
+    color: colors.gray700,
     marginBottom: 4,
   },
   materialDescription: {
