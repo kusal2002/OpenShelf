@@ -107,6 +107,7 @@ export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
   success: boolean;
+  url?: string; // For OAuth flows that need to redirect to external URLs
 }
 
 export interface SupabaseResponse<T> {

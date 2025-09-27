@@ -45,7 +45,7 @@ const { width: screenWidth } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<MainTabParamList, 'Home'>;
 
-export const HomeScreenold = ({ navigation }: Props) => {
+export const HomeScreen = ({ navigation }: Props) => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [filteredMaterials, setFiltereredMaterials] = useState<Material[]>([]);
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({});
@@ -960,4 +960,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreenold;
+export default HomeScreen;
