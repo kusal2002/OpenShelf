@@ -53,7 +53,27 @@ const colors = {
 
 const { width, height } = Dimensions.get('window');
 
-type LibraryScreenProps = NativeStackScreenProps<MainTabParamList, 'Library'>;
+// Define route params interface
+interface LibraryScreenRouteParams {
+  initialTab?: 'all' | 'bookmarks' | MaterialCategory;
+  refreshBookmarks?: boolean;
+  bookmarkedMaterialId?: string;
+}
+
+// Augment the navigation types
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList {
+      Library: LibraryScreenRouteParams | undefined;
+    }
+  }
+}
+
+// Ensure proper typing for the route params
+type LibraryScreenProps = NativeStackScreenProps<
+  { Library: LibraryScreenRouteParams },
+  'Library'
+>;
 
 interface SortOption {
   key: string;
@@ -61,6 +81,7 @@ interface SortOption {
   icon: string;
 }
 
+// Keeping this for future use
 interface FilterOption {
   key: string;
   label: string;
@@ -80,10 +101,11 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [bookmarkedMaterials, setBookmarkedMaterials] = useState<Material[]>([]);
 
   // Enhanced UI state
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all' | 'bookmarks'>('all');
   const [sortBy, setSortBy] = useState<'title' | 'date' | 'category' | 'downloads'>('date');
   const [showSortModal, setShowSortModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
@@ -101,6 +123,7 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
 
   const categories = [
     { key: 'all', label: 'All Materials', icon: '📚' },
+    { key: 'bookmarks', label: 'Bookmarks', icon: '🔖' },
     { key: 'textbook', label: 'Textbooks', icon: '📖' },
     { key: 'notes', label: 'Notes', icon: '📝' },
     { key: 'presentation', label: 'Presentations', icon: '🎭' },
@@ -138,9 +161,100 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
   }
 }, [user?.id]);
 
-// Advanced search and filtering
+// Fetch bookmarked materials
+const fetchBookmarkedMaterials = useCallback(async () => {
+  if (!user?.id) return;
+  setLoading(prev => ({ ...prev, action: true }));
+  try {
+    console.log('Fetching bookmarks for user:', user.id);
+    const response = await supabaseService.getBookmarkedMaterials(user.id);
+    if (response.success && response.data) {
+      console.log('Bookmarked materials fetched:', response.data.length);
+      setBookmarkedMaterials(response.data);
+      
+      // Also update any matching materials in the main list to show bookmark status
+      setMaterials(prevMaterials => {
+        return prevMaterials.map(material => {
+          const isBookmarked = response.data.some(bm => bm.id === material.id);
+          return isBookmarked ? { ...material, is_bookmarked: true } : material;
+        });
+      });
+    } else {
+      console.error('Failed to fetch bookmarked materials:', response.error);
+    }
+  } catch (error) {
+    console.error('Unexpected error fetching bookmarks:', error);
+  } finally {
+    setLoading(prev => ({ ...prev, action: false }));
+  }
+}, [user?.id]);
+
+  // Toggle bookmark status
+const toggleBookmark = useCallback(async (material: Material) => {
+  if (!user?.id) return;
+  
+  try {
+    setLoading(prev => ({ ...prev, action: true }));
+    
+    // Check if material is bookmarked
+    const isCurrentlyBookmarked = bookmarkedMaterials.some(m => m.id === material.id);
+    
+    if (isCurrentlyBookmarked) {
+      // Remove bookmark
+      const response = await supabaseService.removeBookmark(user.id, material.id);
+      if (response.success) {
+        // Remove from bookmarked materials
+        setBookmarkedMaterials(prev => prev.filter(m => m.id !== material.id));
+        
+        // Different message when removing from the bookmarks view
+        if (selectedCategory === 'bookmarks') {
+          Alert.alert('Success', 'Bookmark removed from your library');
+          
+          // This will trigger useEffect that calls applyFiltersAndSearch
+          setSelectedCategory('bookmarks');
+        } else {
+          Alert.alert('Success', 'Bookmark removed');
+        }
+        
+        // Update material in the main materials list to reflect bookmark status
+        setMaterials(prev => prev.map(m => 
+          m.id === material.id ? { ...m, is_bookmarked: false } : m
+        ));
+      }
+    } else {
+      // Add bookmark
+      const response = await supabaseService.addBookmark(user.id, material.id);
+      if (response.success) {
+        const updatedMaterial = { ...material, is_bookmarked: true };
+        setBookmarkedMaterials(prev => [...prev, updatedMaterial]);
+        Alert.alert('Success', 'Material bookmarked');
+        
+        // Update material in the main materials list to reflect bookmark status
+        setMaterials(prev => prev.map(m => 
+          m.id === material.id ? { ...m, is_bookmarked: true } : m
+        ));
+      }
+    }
+  } catch (error) {
+    console.error('Error toggling bookmark:', error);
+    Alert.alert('Error', 'Failed to update bookmark');
+  } finally {
+    setLoading(prev => ({ ...prev, action: false }));
+  }
+}, [user?.id, bookmarkedMaterials, selectedCategory]);// Advanced search and filtering
   const applyFiltersAndSearch = useCallback(() => {
-    let result = materials;
+    let result = [...materials]; // Create a copy to avoid reference issues
+    
+    // Handle bookmark filter specifically
+    if (selectedCategory === 'bookmarks') {
+      console.log('Applying bookmarks filter, found:', bookmarkedMaterials.length);
+      result = [...bookmarkedMaterials]; // Create a copy to avoid reference issues
+    } else {
+      // Apply category filter for non-bookmark views
+      if (selectedCategory !== 'all') {
+        result = result.filter(material => material.category === selectedCategory);
+      }
+    }
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -151,11 +265,8 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
         material.category.toLowerCase().includes(query)
       );
     }
-
-    // Apply category filter
-    if (selectedCategory !== 'all') {
-      result = result.filter(material => material.category === selectedCategory);
-    }
+    
+    // Note: Category filter for non-bookmarks is already applied above
 
     // Apply sorting
     switch (sortBy) {
@@ -173,7 +284,7 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
     }
 
     setFilteredMaterials(result);
-  }, [materials, searchQuery, selectedCategory, sortBy]);
+  }, [materials, bookmarkedMaterials, searchQuery, selectedCategory, sortBy]);
 
   // Material actions
   const handleMaterialAction = useCallback((action: string, material: Material) => {
@@ -189,6 +300,11 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
       case 'download':
         handleDownloadMaterial(material);
         break;
+      case 'bookmark':
+        toggleBookmark(material);
+        // Apply filters after bookmark changes
+        setTimeout(() => applyFiltersAndSearch(), 500);
+        break;
       case 'share':
         handleShareMaterial(material);
         break;
@@ -199,7 +315,7 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
         navigation.navigate('Upload', { editMaterial: material } as any);
         break;
     }
-  }, [navigation]);
+  }, [navigation, toggleBookmark, applyFiltersAndSearch]);
 
   const handleDownloadMaterial = async (material: any) => {
     try {
@@ -273,11 +389,51 @@ useEffect(() => {
   fetchUser();
 }, []);
 
+  // Load initial data when user is set
   useEffect(() => {
     if (user?.id) {
       fetchUserMaterials();
+      fetchBookmarkedMaterials();
     }
-  }, [user, fetchUserMaterials]);
+  }, [user, fetchUserMaterials, fetchBookmarkedMaterials]);
+  
+  // Refresh bookmarks when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('Library screen focused, refreshing bookmarks');
+      if (user?.id) {
+        fetchBookmarkedMaterials();
+      }
+    });
+    
+    return unsubscribe;
+  }, [navigation, fetchBookmarkedMaterials, user?.id]);
+
+  // Handle navigation params - check if we should show bookmarks
+  useEffect(() => {
+    const params = route.params;
+    if (params) {
+      // Check for initialTab parameter
+      if (params.initialTab === 'bookmarks') {
+        console.log('Setting active tab to bookmarks based on navigation params');
+        setSelectedCategory('bookmarks');
+      }
+      
+      // Check if we should refresh bookmarks
+      if (params.refreshBookmarks || params.initialTab === 'bookmarks') {
+        console.log('Refreshing bookmarks based on navigation params');
+        if (user?.id) {
+          fetchBookmarkedMaterials();
+        }
+      }
+      
+      // If a specific bookmarked material ID was provided, highlight it somehow
+      if (params.bookmarkedMaterialId) {
+        console.log('Bookmarked material ID from navigation:', params.bookmarkedMaterialId);
+        // Could implement highlighting for the specific item here
+      }
+    }
+  }, [route.params, fetchBookmarkedMaterials, user?.id]);
 
   useEffect(() => {
     applyFiltersAndSearch();
@@ -350,6 +506,13 @@ useEffect(() => {
             { key: 'view', label: 'View Details', icon: '👁️' },
             { key: 'download', label: 'Download', icon: '⬇️' },
             { key: 'share', label: 'Share', icon: '📤' },
+            { 
+              key: 'bookmark', 
+              label: bookmarkedMaterials.some(m => m.id === selectedMaterial?.id) 
+                ? 'Remove Bookmark' 
+                : 'Add to Bookmarks', 
+              icon: bookmarkedMaterials.some(m => m.id === selectedMaterial?.id) ? '🗑️🔖' : '🔖' 
+            },
             { key: 'edit', label: 'Edit', icon: '✏️' },
             { key: 'delete', label: 'Delete', icon: '🗑️', danger: true },
           ].map((action) => (
@@ -485,9 +648,19 @@ useEffect(() => {
   >
     {/* Card Header */}
     <View style={styles.cardHeader}>
-      <Text style={styles.categoryBadge}>
-        {categories.find(c => c.key === item.category)?.icon || '📄'} {item.category}
-      </Text>
+      <View style={styles.cardHeaderLeft}>
+        <View style={styles.badgeContainer}>
+          <Text style={styles.categoryBadge}>
+            {categories.find(c => c.key === item.category)?.icon || '📄'} {item.category}
+          </Text>
+          
+          {bookmarkedMaterials.some(m => m.id === item.id) && (
+            <View style={styles.bookmarkIndicator}>
+              <Text style={styles.bookmarkBadge}>🔖 Bookmarked</Text>
+            </View>
+          )}
+        </View>
+      </View>
       
       {/* Triple Dots Menu */}
       <TouchableOpacity
@@ -537,12 +710,42 @@ useEffect(() => {
       >
         <Text style={styles.primaryButtonText}>Download</Text>
       </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.actionButton, styles.secondaryButton]}
-        onPress={() => handleShareMaterial(item)}
-      >
-        <Text style={styles.secondaryButtonText}>Share</Text>
-      </TouchableOpacity>
+      
+      {selectedCategory !== 'bookmarks' && (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.secondaryButton]}
+          onPress={() => toggleBookmark(item)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            {bookmarkedMaterials.some(m => m.id === item.id) 
+              ? 'Remove Bookmark' 
+              : 'Bookmark'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      
+      {selectedCategory === 'bookmarks' && (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.warningButton]}
+          onPress={() => {
+            // Confirm before removing from bookmarks view
+            Alert.alert(
+              'Remove Bookmark',
+              'Are you sure you want to remove this material from your bookmarks?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Remove', 
+                  style: 'destructive',
+                  onPress: () => toggleBookmark(item)
+                }
+              ]
+            );
+          }}
+        >
+          <Text style={styles.warningButtonText}>Remove Bookmark</Text>
+        </TouchableOpacity>
+      )}
     </View>
   </View>
 );
@@ -560,9 +763,9 @@ useEffect(() => {
             {previewMaterial?.title || 'Material Preview'}
           </Text>
           <View style={styles.divider} />
-          <ScrollView style={{ maxHeight: height * 0.4, paddingHorizontal: 20, paddingTop: 12 }}>
+          <ScrollView style={styles.previewScrollContent}>
             {previewMaterial?.description && (
-              <Text style={[styles.materialDescription, { marginBottom: 12 }]}>${'{'}previewMaterial.description{'}'}</Text>
+              <Text style={[styles.materialDescription, styles.previewDescription]}>{previewMaterial.description}</Text>
             )}
             <Text style={styles.optionText}>Category: {previewMaterial?.category}</Text>
             <Text style={styles.optionText}>Size: {previewMaterial ? (previewMaterial.file_size / 1_000_000).toFixed(2) : '--'} MB</Text>
@@ -571,7 +774,7 @@ useEffect(() => {
               <Text style={styles.optionText}>Downloads: {previewMaterial.download_count}</Text>
             )}
           </ScrollView>
-          <View style={{ flexDirection: 'row', gap: 12, padding: 20, paddingTop: 8 }}>
+          <View style={styles.previewActionContainer}>
             <TouchableOpacity
               style={[styles.actionButton, styles.primaryButton]}
               onPress={() => {
@@ -655,7 +858,10 @@ useEffect(() => {
         refreshControl={
           <RefreshControl
             refreshing={loading.refresh}
-            onRefresh={() => fetchUserMaterials(true)}
+            onRefresh={() => {
+              fetchUserMaterials(true);
+              fetchBookmarkedMaterials();
+            }}
             colors={[colors.primary]}
           />
         }
@@ -691,10 +897,11 @@ useEffect(() => {
         visible={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         userId={user?.id || ''}
-        category={selectedCategory === 'all' ? 'Other' : selectedCategory}
+        category={selectedCategory === 'all' || selectedCategory === 'bookmarks' ? 'Other' : selectedCategory as MaterialCategory}
         onUploaded={() => {
           setShowUploadModal(false);
           fetchUserMaterials();
+          fetchBookmarkedMaterials();
         }}
       />
     </SafeAreaView>
@@ -876,11 +1083,32 @@ const styles = StyleSheet.create({
   cardHeaderLeft: {
     flex: 1,
   },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
   categoryBadge: {
     fontSize: 12,
     fontWeight: '500',
     color: colors.primary,
     backgroundColor: colors.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 4,
+  },
+  bookmarkIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bookmarkBadge: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.warning700,
+    backgroundColor: colors.warning100,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -952,6 +1180,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.gray700,
+  },
+  warningButton: {
+    backgroundColor: colors.warning100,
+    borderWidth: 1,
+    borderColor: colors.warning300,
+  },
+  warningButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.warning700,
   },
 
   // Loading States
@@ -1110,6 +1348,22 @@ const styles = StyleSheet.create({
     color: colors.white,
     lineHeight: 28,
   },
+  
+  // Preview modal styles
+  previewScrollContent: {
+    maxHeight: height * 0.4, 
+    paddingHorizontal: 20, 
+    paddingTop: 12
+  },
+  previewDescription: {
+    marginBottom: 12
+  },
+  previewActionContainer: {
+    flexDirection: 'row', 
+    gap: 12, 
+    padding: 20, 
+    paddingTop: 8
+  }
 });
 
 export default LibraryScreen;

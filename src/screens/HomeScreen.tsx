@@ -48,6 +48,7 @@ type Props = NativeStackScreenProps<MainTabParamList, 'Home'>;
 export const HomeScreenold = ({ navigation }: Props) => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [filteredMaterials, setFiltereredMaterials] = useState<Material[]>([]);
+  const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({});
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,11 +65,50 @@ export const HomeScreenold = ({ navigation }: Props) => {
 
   useEffect(() => {
     loadMaterials(true);
+    loadUserBookmarks();
   }, []);
+  
+  // Add focus listener to refresh bookmark status
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Just refresh bookmark status when returning to this screen
+      loadUserBookmarks();
+    });
+    
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     filterMaterials();
   }, [materials, searchQuery, selectedCategory]);
+  
+  // Load the user's bookmarks
+  const loadUserBookmarks = useCallback(async () => {
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) return;
+      
+      const userId = session.user.id;
+      const { data: bookmarkedMaterials } = await supabaseService.getBookmarkedMaterials(userId);
+      
+      if (bookmarkedMaterials) {
+        // Create a lookup object for O(1) access to bookmark status
+        const bookmarkMap: Record<string, boolean> = {};
+        bookmarkedMaterials.forEach(material => {
+          bookmarkMap[material.id] = true;
+        });
+        setUserBookmarks(bookmarkMap);
+        
+        // Update materials in state if they exist
+        setMaterials(prev => prev.map(material => ({
+          ...material,
+          is_bookmarked: !!bookmarkMap[material.id]
+        })));
+      }
+    } catch (error) {
+      console.error('Error loading bookmarks:', error);
+    }
+  }, []);
 
   const loadMaterials = async (isInitialLoad: boolean = false) => {
     try {
@@ -151,6 +191,71 @@ export const HomeScreenold = ({ navigation }: Props) => {
   const loadMore = () => {
     if (hasMore && !isLoadingMore && isOnline) {
       loadMaterials(false);
+    }
+  };
+
+  // Toggle bookmark status
+  const toggleBookmark = async (material: Material) => {
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) {
+        Alert.alert('Sign In Required', 'Please sign in to bookmark materials.');
+        return;
+      }
+
+      const userId = session.user.id;
+      const isCurrentlyBookmarked = material.is_bookmarked;
+
+      // Optimistically update the UI
+      setMaterials(prev => 
+        prev.map(m => m.id === material.id 
+          ? {...m, is_bookmarked: !isCurrentlyBookmarked} 
+          : m
+        )
+      );
+
+      // Update bookmarks map
+      setUserBookmarks(prev => ({
+        ...prev,
+        [material.id]: !isCurrentlyBookmarked
+      }));
+
+      // Make API call based on current bookmark status
+      if (isCurrentlyBookmarked) {
+        await supabaseService.removeBookmark(userId, material.id);
+        Alert.alert('Bookmark Removed', `"${material.title}" has been removed from your bookmarks.`);
+      } else {
+        const response = await supabaseService.addBookmark(userId, material.id);
+        if (response.success) {
+          console.log('Successfully added bookmark for material:', material.id);
+          Alert.alert(
+            'Bookmark Added',
+            `"${material.title}" has been added to your bookmarks.`,
+            [
+              { text: 'OK', style: 'default' },
+              { 
+                text: 'View in Library', 
+                onPress: () => {
+                  // Ensure the bookmark is visible when navigating
+                  navigation.navigate('Library', { 
+                    initialTab: 'bookmarks',
+                    refreshBookmarks: true,
+                    bookmarkedMaterialId: material.id
+                  } as any);
+                }
+              }
+            ]
+          );
+        } else {
+          console.error('Failed to add bookmark:', response.error);
+          Alert.alert('Error', 'Failed to add bookmark. Please try again.');
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+      // Revert optimistic update if there's an error
+      loadUserBookmarks();
     }
   };
 
@@ -307,6 +412,11 @@ export const HomeScreenold = ({ navigation }: Props) => {
           <Text style={styles.materialIconText}>
             {FILE_ICONS[item.file_type as keyof typeof FILE_ICONS] || '📄'}
           </Text>
+          {item.is_bookmarked && (
+            <View style={styles.bookmarkIconContainer}>
+              <Text style={styles.bookmarkIconText}>🔖</Text>
+            </View>
+          )}
         </View>
         <View style={styles.materialInfo}>
           <Text style={styles.materialTitle} numberOfLines={2}>
@@ -317,6 +427,9 @@ export const HomeScreenold = ({ navigation }: Props) => {
             <Text style={styles.materialSize}>
               {FileUtils.formatFileSize(item.file_size)}
             </Text>
+            {item.is_bookmarked && (
+              <Text style={styles.bookmarkText}>Bookmarked</Text>
+            )}
           </View>
         </View>
       </View>
@@ -341,9 +454,25 @@ export const HomeScreenold = ({ navigation }: Props) => {
       )}
 
       <View style={styles.materialFooter}>
-        <Text style={styles.materialDate}>
-          {DateUtils.getRelativeTime(item.created_at)}
-        </Text>
+        <View style={styles.leftActions}>
+          <Text style={styles.materialDate}>
+            {DateUtils.getRelativeTime(item.created_at)}
+          </Text>
+          <TouchableOpacity 
+            style={[
+              styles.bookmarkButton,
+              item.is_bookmarked ? styles.bookmarkButtonActive : {}
+            ]} 
+            onPress={() => toggleBookmark(item)}
+          >
+            <Text style={styles.bookmarkButtonIcon}>
+              {item.is_bookmarked ? '🔖' : '📑'}
+            </Text>
+            <Text style={styles.bookmarkButtonText}>
+              {item.is_bookmarked ? 'Bookmarked' : 'Bookmark'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.downloadInfo}>
           <Text style={styles.downloadCount}>📥 {item.download_count || 0}</Text>
           <TouchableOpacity style={styles.downloadButton} onPress={() => downloadMaterial(item)}>
@@ -646,6 +775,28 @@ const styles = StyleSheet.create({
     ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textTertiary,
   },
+  bookmarkIconContainer: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: THEME_COLORS.background,
+    borderRadius: 12,
+    padding: 2,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+  },
+  bookmarkIconText: {
+    fontSize: 16,
+  },
+  bookmarkText: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.warning,
+    marginLeft: UI_CONSTANTS.spacing.xs,
+    fontWeight: '500',
+  },
   materialDescription: {
     ...UI_CONSTANTS.typography.body2,
     color: THEME_COLORS.textSecondary,
@@ -681,9 +832,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: UI_CONSTANTS.spacing.xs,
   },
+  leftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: UI_CONSTANTS.spacing.sm,
+  },
   materialDate: {
     ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textTertiary,
+  },
+  bookmarkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: UI_CONSTANTS.spacing.xs,
+    paddingHorizontal: UI_CONSTANTS.spacing.sm,
+    backgroundColor: THEME_COLORS.surfaceVariant,
+    borderRadius: UI_CONSTANTS.borderRadius.md,
+    gap: 4,
+  },
+  bookmarkButtonActive: {
+    backgroundColor: THEME_COLORS.primary + '20',
+  },
+  bookmarkButtonIcon: {
+    fontSize: 18,
+  },
+  bookmarkButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: THEME_COLORS.textSecondary,
   },
   downloadInfo: {
     flexDirection: 'row',
