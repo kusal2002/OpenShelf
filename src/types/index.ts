@@ -48,6 +48,8 @@ export interface Material {
   // Offline support
   is_downloaded?: boolean;
   local_path?: string;
+  // Bookmark support
+  is_bookmarked?: boolean;
 }
 
 export type MaterialCategory = 
@@ -63,6 +65,14 @@ export type MaterialCategory =
   | 'Engineering'
   | 'Medicine'
   | 'Other';
+
+// Material Bookmark Type
+export interface MaterialBookmark {
+  id: string;
+  user_id: string;
+  material_id: string;
+  created_at: string;
+}
 
 // Reading Progress Types (Future Implementation)
 export interface ReadingProgress {
@@ -97,6 +107,7 @@ export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
   success: boolean;
+  url?: string; // For OAuth flows that need to redirect to external URLs
 }
 
 export interface SupabaseResponse<T> {

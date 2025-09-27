@@ -211,6 +211,67 @@ class SupabaseService {
   }
 
   /**
+   * Sign in with Google OAuth
+   */
+  async signInWithGoogle(): Promise<ApiResponse<AuthUser>> {
+    if (!this.checkClient()) {
+      return { data: null, error: 'Supabase client not available', success: false };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'com.openshelf://',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      // For mobile apps, we need to handle the OAuth flow differently
+      // The data.url will contain the OAuth URL that should be opened in a browser
+      if (data.url) {
+        // In React Native, we'll need to use a WebView or external browser
+        // For now, return the URL so the UI can handle it
+        return {
+          data: null,
+          error: null,
+          success: true,
+          url: data.url,
+        };
+      }
+
+      return {
+        data: data.user ? {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || '',
+          university_id: data.user.user_metadata?.university_id,
+          avatar_url: data.user.user_metadata?.avatar_url,
+          email_confirmed_at: data.user.email_confirmed_at,
+          phone: data.user.phone,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at || new Date().toISOString(),
+        } : null,
+        error: null,
+        success: true,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Google sign in failed',
+        success: false,
+      };
+    }
+  }
+
+  /**
    * Get the current authenticated user session
    */
   async getCurrentSession() {
@@ -654,6 +715,142 @@ class SupabaseService {
       return {
         data: null,
         error: error instanceof Error ? error.message : 'Content moderation failed',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Add a material to bookmarks
+   */
+  async addBookmark(userId: string, materialId: string): Promise<ApiResponse<any>> {
+    try {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .insert([{
+          user_id: userId,
+          material_id: materialId,
+          page_number: 1, // Default to page 1 since page_number is required
+          created_at: new Date().toISOString()
+        }])
+        .select();
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      return { data, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to add bookmark',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Remove a material from bookmarks
+   */
+  async removeBookmark(userId: string, materialId: string): Promise<ApiResponse<null>> {
+    try {
+      const { error } = await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('user_id', userId)
+        .eq('material_id', materialId);
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      return { data: null, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to remove bookmark',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Get all bookmarked materials for a user
+   */
+  async getBookmarkedMaterials(userId: string): Promise<ApiResponse<Material[]>> {
+    try {
+      console.log('Getting bookmarked materials for user:', userId);
+      
+      // First get bookmark entries
+      const { data: bookmarks, error: bookmarkError } = await supabase
+        .from('bookmarks')
+        .select('material_id')
+        .eq('user_id', userId);
+
+      if (bookmarkError) {
+        console.error('Error fetching bookmarks:', bookmarkError.message);
+        return { data: null, error: bookmarkError.message, success: false };
+      }
+
+      console.log('Bookmarks found:', bookmarks?.length || 0);
+      
+      if (!bookmarks || bookmarks.length === 0) {
+        return { data: [], error: null, success: true };
+      }
+
+      // Get the actual materials using the material_ids
+      const materialIds = bookmarks.map(bookmark => bookmark.material_id);
+      console.log('Material IDs from bookmarks:', materialIds);
+      
+      const { data: materials, error: materialsError } = await supabase
+        .from('materials')
+        .select('*')
+        .in('id', materialIds);
+
+      if (materialsError) {
+        console.error('Error fetching bookmarked materials:', materialsError.message);
+        return { data: null, error: materialsError.message, success: false };
+      }
+
+      console.log('Bookmarked materials found:', materials?.length || 0);
+      
+      // Mark all returned materials as bookmarked
+      const bookmarkedMaterials = materials.map(material => ({
+        ...material,
+        is_bookmarked: true
+      }));
+
+      return { data: bookmarkedMaterials || [], error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to get bookmarked materials',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Check if a material is bookmarked by the user
+   */
+  async isBookmarked(userId: string, materialId: string): Promise<ApiResponse<boolean>> {
+    try {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('material_id', materialId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is 'no rows returned'
+        return { data: null, error: error.message, success: false };
+      }
+
+      return { data: !!data, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to check bookmark status',
         success: false,
       };
     }
