@@ -312,7 +312,8 @@ const toggleBookmark = useCallback(async (material: Material) => {
         handleDeleteMaterial(material);
         break;
       case 'edit':
-        navigation.navigate('Upload', { editMaterial: material } as any);
+        // Upload lives in a different navigator; relax typing for cross-nav call
+        (navigation as any).navigate('Upload', { editMaterial: material });
         break;
     }
   }, [navigation, toggleBookmark, applyFiltersAndSearch]);
