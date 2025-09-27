@@ -211,6 +211,67 @@ class SupabaseService {
   }
 
   /**
+   * Sign in with Google OAuth
+   */
+  async signInWithGoogle(): Promise<ApiResponse<AuthUser>> {
+    if (!this.checkClient()) {
+      return { data: null, error: 'Supabase client not available', success: false };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'com.openshelf://',
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      // For mobile apps, we need to handle the OAuth flow differently
+      // The data.url will contain the OAuth URL that should be opened in a browser
+      if (data.url) {
+        // In React Native, we'll need to use a WebView or external browser
+        // For now, return the URL so the UI can handle it
+        return {
+          data: null,
+          error: null,
+          success: true,
+          url: data.url,
+        };
+      }
+
+      return {
+        data: data.user ? {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.name || '',
+          university_id: data.user.user_metadata?.university_id,
+          avatar_url: data.user.user_metadata?.avatar_url,
+          email_confirmed_at: data.user.email_confirmed_at,
+          phone: data.user.phone,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at || new Date().toISOString(),
+        } : null,
+        error: null,
+        success: true,
+      };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Google sign in failed',
+        success: false,
+      };
+    }
+  }
+
+  /**
    * Get the current authenticated user session
    */
   async getCurrentSession() {
