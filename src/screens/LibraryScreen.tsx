@@ -65,13 +65,28 @@ declare global {
   namespace ReactNavigation {
     interface RootParamList {
       Library: LibraryScreenRouteParams | undefined;
+      Upload: { editMaterial?: Material } | undefined;
+      MaterialPreview: { material: Material };
+      MaterialDetails: { material: Material };
+      Login: undefined;
+      SignUp: undefined;
     }
   }
 }
 
+// Define the root stack param list for this app
+type RootStackParamList = {
+  Library: LibraryScreenRouteParams | undefined;
+  Upload: { editMaterial?: Material } | undefined;
+  MaterialPreview: { material: Material };
+  MaterialDetails: { material: Material };
+  Login: undefined;
+  SignUp: undefined;
+};
+
 // Ensure proper typing for the route params
 type LibraryScreenProps = NativeStackScreenProps<
-  { Library: LibraryScreenRouteParams },
+  RootStackParamList,
   'Library'
 >;
 
@@ -269,32 +284,34 @@ const toggleBookmark = useCallback(async (material: Material) => {
     // Note: Category filter for non-bookmarks is already applied above
 
     // Apply sorting
-    switch (sortBy) {
-      case 'title':
-        result.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case 'category':
-        result.sort((a, b) => a.category.localeCompare(b.category));
-        break;
-      case 'downloads':
-        result.sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
-        break;
-      default: // date
-        result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
+        switch (sortBy) {
+          case 'title':
+            result.sort((a, b) => a.title.localeCompare(b.title));
+            break;
+          case 'category':
+            result.sort((a, b) => a.category.localeCompare(b.category));
+            break;
+          case 'downloads':
+            result.sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
+            break;
+          case 'date':
+          default:
+            result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            break;
+        }
 
     setFilteredMaterials(result);
   }, [materials, bookmarkedMaterials, searchQuery, selectedCategory, sortBy]);
-
-  // Material actions
   const handleMaterialAction = useCallback((action: string, material: Material) => {
     setShowActionsModal(false);
     setSelectedMaterial(null);
 
     switch (action) {
       case 'view':
-        // Open the full-screen preview for this material
         navigation.navigate('MaterialPreview' as any, { material } as any);
+        break;
+      case 'edit':
+        navigation.navigate('Upload', { editMaterial: material } as any);
         break;
       case 'download':
         handleDownloadMaterial(material);
@@ -310,8 +327,7 @@ const toggleBookmark = useCallback(async (material: Material) => {
       case 'delete':
         handleDeleteMaterial(material);
         break;
-      case 'edit':
-        navigation.navigate('Upload', { editMaterial: material } as any);
+      default:
         break;
     }
   }, [navigation, toggleBookmark, applyFiltersAndSearch]);
@@ -764,13 +780,14 @@ useEffect(() => {
           <View style={styles.divider} />
           <ScrollView style={styles.previewScrollContent}>
             {previewMaterial?.description && (
-              <Text style={[styles.materialDescription, styles.previewDescription]}>{previewMaterial.description}</Text>
+              <Text style={[styles.optionText, styles.previewDescription]}>
+                {previewMaterial.description}
+              </Text>
             )}
-            <Text style={styles.optionText}>Category: {previewMaterial?.category}</Text>
-            <Text style={styles.optionText}>Size: {previewMaterial ? (previewMaterial.file_size / 1_000_000).toFixed(2) : '--'} MB</Text>
-            <Text style={styles.optionText}>Uploaded: {previewMaterial ? new Date(previewMaterial.created_at).toLocaleDateString() : '--'}</Text>
             {previewMaterial?.download_count != null && (
-              <Text style={styles.optionText}>Downloads: {previewMaterial.download_count}</Text>
+              <Text style={styles.optionText}>
+                Downloads: {previewMaterial.download_count}
+              </Text>
             )}
           </ScrollView>
           <View style={styles.previewActionContainer}>
