@@ -293,9 +293,8 @@ const toggleBookmark = useCallback(async (material: Material) => {
 
     switch (action) {
       case 'view':
-        // Navigate to material detail view
-        // navigation.navigate('MaterialDetail', { materialId: material.id });
-        Alert.alert('View Material', `Opening: ${material.title}`);
+        // Open the full-screen preview for this material
+        navigation.navigate('MaterialPreview' as any, { material } as any);
         break;
       case 'download':
         handleDownloadMaterial(material);
@@ -775,6 +774,19 @@ useEffect(() => {
             )}
           </ScrollView>
           <View style={styles.previewActionContainer}>
+            {/* View button: open full-screen preview and close modal */}
+            <TouchableOpacity
+              style={[styles.actionButton, styles.viewButton]}
+              onPress={() => {
+                if (!previewMaterial) return;
+                const mat = previewMaterial;
+                setShowPreviewModal(false);
+                setPreviewMaterial(null);
+                navigation.navigate('MaterialPreview' as any, { material: mat } as any);
+              }}
+            >
+              <Text style={styles.viewButtonText}>View</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionButton, styles.primaryButton]}
               onPress={() => {
@@ -1190,6 +1202,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.warning700,
+  },
+  viewButton: {
+    backgroundColor: colors.gray100,
+    borderWidth: 1,
+    borderColor: colors.gray300,
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  viewButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.gray800,
   },
 
   // Loading States

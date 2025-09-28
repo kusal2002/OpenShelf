@@ -404,8 +404,10 @@ export const HomeScreen = ({ navigation }: Props) => {
   );
 
   const renderMaterialCard = ({ item }: { item: Material }) => (
-    <View
+    <TouchableOpacity
       style={styles.materialCard}
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('MaterialDetails' as any, { material: item } as any)}
     >
       <View style={styles.materialHeader}>
         <View style={styles.materialIcon}>
@@ -480,7 +482,7 @@ export const HomeScreen = ({ navigation }: Props) => {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderEmptyState = () => (

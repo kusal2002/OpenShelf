@@ -22,6 +22,8 @@ import HomeScreen from './src/screens/HomeScreen';
 import UploadScreen from './src/screens/UploadScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import MaterialDetailsScreen from './src/screens/MaterialDetailsScreen';
+import MaterialPreviewScreen from './src/screens/MaterialPreviewScreen';
 
 // Onboarding screens
 import Onboarding1Screen from './src/screens/Onboarding1Screen';
@@ -152,7 +154,7 @@ export default function App() {
     // Listen for auth state changes
     const authListener = onAuthStateChange((event: any, session: any) => {
       console.log('Auth event:', event, session?.user?.email);
-
+      
       setAuthState((prev: AuthState) => ({
         ...prev,
         user: session?.user ? {
@@ -295,6 +297,8 @@ export default function App() {
             return (
               <SNav screenOptions={{ headerShown: false }}>
                 <SScreen name="Main" component={MainTabs} />
+                <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
+                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
                 {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
                 {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
               </SNav>
