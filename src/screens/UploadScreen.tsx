@@ -33,7 +33,8 @@ import {
   MaterialCategory, 
   FileUpload,
   FormErrors,
-  UploadProgress
+  UploadProgress,
+  SubCategory
 } from '../types';
 import {
   FileUtils,
@@ -45,6 +46,7 @@ import {
   THEME_COLORS,
   UI_CONSTANTS,
   MATERIAL_CATEGORIES,
+  SUB_CATEGORIES,
 } from '../utils';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -63,6 +65,7 @@ interface UploadForm {
   title: string;
   description: string;
   category: MaterialCategory;
+  subCategory: SubCategory;
   tags: string;
   isPublic: boolean;
 }
@@ -128,6 +131,7 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
     title: '',
     description: '',
     category: 'Other',
+    subCategory: 'Other',
     tags: '',
     isPublic: true,
   });
@@ -138,7 +142,8 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isOnline, setIsOnline] = useState(true);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-
+  const [showSubCategoryModal, setShowSubCategoryModal] = useState(false);
+  
   useEffect(() => {
     const unsubscribe = NetworkUtils.subscribeToNetworkStatus((state: boolean) => {
       setIsOnline(state);
@@ -284,6 +289,7 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
         file_type: FileUtils.getFileExtension(selectedFile!.name || ''),
         user_id: userId,
         category: form.category,
+        sub_category: form.subCategory,
         description: form.description.trim() || undefined,
         tags: form.tags.trim() ? form.tags.split(',').map(tag => tag.trim()) : undefined,
         is_public: form.isPublic,
@@ -331,6 +337,7 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
       title: '',
       description: '',
       category: 'Other',
+      subCategory: 'Other',
       tags: '',
       isPublic: true,
     });
@@ -442,6 +449,29 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.categoryButtonArrow}>▼</Text>
         </TouchableOpacity>
       </View>
+
+{/* Subcategory (single-select chips) */}
+<View style={styles.inputContainer}>
+  <Text style={styles.inputLabel}>Subcategory</Text>
+
+  <View style={styles.rbGroup} accessibilityRole="radiogroup">
+    {SUB_CATEGORIES.map(sc => {
+      const selected = form.subCategory === sc;
+      return (
+        <TouchableOpacity
+          key={sc}
+          disabled={isUploading}
+          onPress={() => setForm(prev => ({ ...prev, subCategory: sc }))}
+          style={[styles.rbItem, selected && styles.rbItemSelected]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected }}
+        >
+          <Text style={[styles.rbLabel, selected && styles.rbLabelSelected]}>{sc}</Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+</View>
 
       {/* Description Input */}
       <View style={styles.inputContainer}>
@@ -579,6 +609,31 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
       </TouchableOpacity>
     </Modal>
   );
+
+{/* Subcategory (radio behavior without radio UI) */}
+<View style={styles.inputContainer}>
+  <Text style={styles.inputLabel}>Subcategory</Text>
+
+  <View style={styles.rbGroup} accessibilityRole="radiogroup">
+    {SUB_CATEGORIES.map(sc => {
+      const selected = form.subCategory === sc;
+      return (
+        <TouchableOpacity
+          key={sc}
+          disabled={isUploading}
+          onPress={() => setForm(prev => ({ ...prev, subCategory: sc }))}
+          style={[styles.rbItem, selected && styles.rbItemSelected]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected }}
+        >
+          <Text style={[styles.rbLabel, selected && styles.rbLabelSelected]}>
+            {sc}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+</View>
 
   return (
     <SafeAreaView style={styles.container}>
@@ -894,6 +949,34 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.primary,
     fontWeight: '600',
   },
+  rbGroup: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: UI_CONSTANTS.spacing.sm, // if your RN version doesn't support gap, remove and use margins on rbItem
+},
+rbItem: {
+  paddingVertical: 8,
+  paddingHorizontal: 14,
+  borderRadius: UI_CONSTANTS.borderRadius.round,
+  borderWidth: 1,
+  borderColor: THEME_COLORS.outline,
+  backgroundColor: THEME_COLORS.surface,
+  opacity: 0.6, // dim by default
+},
+rbItemSelected: {
+  borderColor: THEME_COLORS.primary,
+  backgroundColor: THEME_COLORS.primaryLight,
+  opacity: 1, // “glow”
+  ...UI_CONSTANTS.elevation[1],
+},
+rbLabel: {
+  ...UI_CONSTANTS.typography.body2,
+  color: THEME_COLORS.text,
+},
+rbLabelSelected: {
+  fontWeight: '600',
+  color: THEME_COLORS.text, // switch to THEME_COLORS.textInverse if you prefer white
+},
 });
 
 export default UploadScreen;

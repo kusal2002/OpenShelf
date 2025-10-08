@@ -20,15 +20,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-
 import { supabaseService } from '../services/supabase';
 import { 
   Material, 
   MainTabParamList, 
   MaterialCategory, 
+  SubCategory,
   LoadingState,
   AuthUser 
 } from '../types';
+import { SUB_CATEGORIES } from '../utils';
 import UploadMaterialModal from '../components/UploadMaterialModal';
 // Simple modern color scheme
 const colors = {
@@ -50,6 +51,7 @@ const colors = {
   warning700: '#B45309',
   danger: '#EF4444',
 };
+const [selectedSubCat, setSelectedSubCat] = useState<SubCategory | 'All'>('All');
 
 const { width, height } = Dimensions.get('window');
 
@@ -144,6 +146,7 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     { key: 'presentation', label: 'Presentations', icon: '🎭' },
     { key: 'assignment', label: 'Assignments', icon: '📋' },
     { key: 'research', label: 'Research', icon: '🔬' },
+    { key: 'thesis', label: 'Theses', icon: '🎓' },
     { key: 'reference', label: 'References', icon: '🔗' },
     { key: 'other', label: 'Other', icon: '📄' },
 ];

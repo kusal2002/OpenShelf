@@ -16,6 +16,7 @@ import {
   SignUpCredentials,
   ApiResponse,
   MaterialCategory,
+  SubCategory,
   FileUpload,
 } from '../types';
 
@@ -568,7 +569,7 @@ class SupabaseService {
   /**
    * Search materials by title, category, or tags
    */
-  async searchMaterials(query: string, category?: MaterialCategory): Promise<ApiResponse<Material[]>> {
+  async searchMaterials(query: string, category?: MaterialCategory, subCategory?: SubCategory ): Promise<ApiResponse<Material[]>> {
     try {
       let queryBuilder = supabase
         .from('materials')
@@ -578,6 +579,9 @@ class SupabaseService {
       if (category) {
         queryBuilder = queryBuilder.eq('category', category);
       }
+       if (subCategory) {
+      queryBuilder = queryBuilder.eq('sub_category', subCategory);   // ← filter by subcategory
+    }
 
       const { data, error } = await queryBuilder
         .or(`title.ilike.%${query}%,description.ilike.%${query}%,tags.cs.{${query}}`)

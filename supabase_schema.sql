@@ -235,3 +235,4 @@ VALUES
      ARRAY['calculus', 'mathematics', 'derivatives'], true, 0)
 ON CONFLICT DO NOTHING;
 */
+alter table materials add column sub_category text;  -- or enum if you use one
