@@ -51,7 +51,7 @@ const colors = {
   warning700: '#B45309',
   danger: '#EF4444',
 };
-const [selectedSubCat, setSelectedSubCat] = useState<SubCategory | 'All'>('All');
+// selectedSubCat should be inside the component; declared below with other hooks
 
 const { width, height } = Dimensions.get('window');
 
@@ -120,6 +120,9 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [bookmarkedMaterials, setBookmarkedMaterials] = useState<Material[]>([]);
 
+  // selectedSubCat moved here to ensure hooks run inside component scope
+  const [selectedSubCat, setSelectedSubCat] = useState<SubCategory | 'All'>('All');
+
   // Enhanced UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all' | 'bookmarks'>('all');
@@ -162,7 +165,12 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
   try {
     const response = await supabaseService.getUserMaterials(user.id);
     if (response.success && response.data) {
-      setMaterials(response.data);
+      // Normalize materials so `sub_category` is always present
+      const normalized = (response.data || []).map((m: any) => {
+        const sub = m.sub_category || m.subcategory || m.subCategory || 'Other';
+        return { ...m, sub_category: sub } as Material;
+      });
+      setMaterials(normalized);
     } else {
       console.error('Failed to fetch user materials:', response.error);
       Alert.alert('Error', response.error || 'Failed to load materials');
@@ -270,7 +278,14 @@ const toggleBookmark = useCallback(async (material: Material) => {
     } else {
       // Apply category filter for non-bookmark views
       if (selectedCategory !== 'all') {
-        result = result.filter(material => material.category === selectedCategory);
+        const selectedKey = String(selectedCategory).toLowerCase();
+        result = result.filter(material => {
+          // compare both category and sub_category (case-insensitive)
+          const cat = String(material.category || '').toLowerCase();
+          const m: any = material as any;
+          const sub = String(m.sub_category || m.subcategory || m.subCategory || '').toLowerCase();
+          return cat === selectedKey || sub === selectedKey;
+        });
       }
     }
 
@@ -455,7 +470,7 @@ useEffect(() => {
 
   useEffect(() => {
     applyFiltersAndSearch();
-  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch]);
+  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch, selectedSubCat]);
 
   // Custom modal components
   const renderSortModal = () => (

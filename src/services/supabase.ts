@@ -109,11 +109,14 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
+      // Narrow the response to check if 'user' exists
+      const maybeUserSignUp = (data as any).user ?? null;
+
       // Create user profile in the users table
-      if (data.user) {
+      if (maybeUserSignUp) {
         await this.createUserProfile({
-          id: data.user.id,
-          email: data.user.email!,
+          id: maybeUserSignUp.id,
+          email: maybeUserSignUp.email!,
           name: credentials.name,
           university_id: credentials.university_id,
           created_at: new Date().toISOString(),
@@ -122,16 +125,16 @@ class SupabaseService {
       }
 
       return {
-        data: data.user ? {
-          id: data.user.id,
-          email: data.user.email || '',
+        data: maybeUserSignUp ? {
+          id: maybeUserSignUp.id,
+          email: maybeUserSignUp.email || '',
           name: credentials.name,
           university_id: credentials.university_id,
-          avatar_url: data.user.user_metadata?.avatar_url,
-          email_confirmed_at: data.user.email_confirmed_at,
-          phone: data.user.phone,
-          created_at: data.user.created_at,
-          updated_at: data.user.updated_at || new Date().toISOString(),
+          avatar_url: maybeUserSignUp.user_metadata?.avatar_url,
+          email_confirmed_at: maybeUserSignUp.email_confirmed_at,
+          phone: maybeUserSignUp.phone,
+          created_at: maybeUserSignUp.created_at,
+          updated_at: maybeUserSignUp.updated_at || new Date().toISOString(),
         } : null,
         error: null,
         success: true,
@@ -163,17 +166,20 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
+      // Narrow the response to check if 'user' exists (data may be {url} or {user})
+      const maybeUser = (data as any).user ?? null;
+
       return {
-        data: data.user ? {
-          id: data.user.id,
-          email: data.user.email || '',
-          name: data.user.user_metadata?.name || '',
-          university_id: data.user.user_metadata?.university_id,
-          avatar_url: data.user.user_metadata?.avatar_url,
-          email_confirmed_at: data.user.email_confirmed_at,
-          phone: data.user.phone,
-          created_at: data.user.created_at,
-          updated_at: data.user.updated_at || new Date().toISOString(),
+        data: maybeUser ? {
+          id: maybeUser.id,
+          email: maybeUser.email || '',
+          name: maybeUser.user_metadata?.name || '',
+          university_id: maybeUser.user_metadata?.university_id,
+          avatar_url: maybeUser.user_metadata?.avatar_url,
+          email_confirmed_at: maybeUser.email_confirmed_at,
+          phone: maybeUser.phone,
+          created_at: maybeUser.created_at,
+          updated_at: maybeUser.updated_at || new Date().toISOString(),
         } : null,
         error: null,
         success: true,
@@ -248,17 +254,20 @@ class SupabaseService {
         };
       }
 
+      // Narrow the response to check if 'user' exists
+      const maybeUserOauth = (data as any).user ?? null;
+
       return {
-        data: data.user ? {
-          id: data.user.id,
-          email: data.user.email || '',
-          name: data.user.user_metadata?.name || '',
-          university_id: data.user.user_metadata?.university_id,
-          avatar_url: data.user.user_metadata?.avatar_url,
-          email_confirmed_at: data.user.email_confirmed_at,
-          phone: data.user.phone,
-          created_at: data.user.created_at,
-          updated_at: data.user.updated_at || new Date().toISOString(),
+        data: maybeUserOauth ? {
+          id: maybeUserOauth.id,
+          email: maybeUserOauth.email || '',
+          name: maybeUserOauth.user_metadata?.name || '',
+          university_id: maybeUserOauth.user_metadata?.university_id,
+          avatar_url: maybeUserOauth.user_metadata?.avatar_url,
+          email_confirmed_at: maybeUserOauth.email_confirmed_at,
+          phone: maybeUserOauth.phone,
+          created_at: maybeUserOauth.created_at,
+          updated_at: maybeUserOauth.updated_at || new Date().toISOString(),
         } : null,
         error: null,
         success: true,
@@ -502,7 +511,19 @@ class SupabaseService {
         .single();
 
       if (error) {
-        return { data: null, error: error.message, success: false };
+        const msg = error.message || '';
+        // Provide a clear actionable error when sub_category column is missing / schema not migrated
+        if (msg.includes("Could not find the 'sub_category' column") || /column .*sub_category.* does not exist/i.test(msg) || msg.includes('schema cache')) {
+          const guidance = 'The sub_category column is missing in the materials table. Run the migration to add it:\n\nALTER TABLE materials ADD COLUMN IF NOT EXISTS sub_category TEXT;';
+          console.error('createMaterial failed - missing sub_category column. Migration required. Original error:', msg);
+          return { data: null, error: guidance, success: false };
+        }
+        return { data: null, error: msg, success: false };
+      }
+
+      // Sanity check: ensure sub_category is present in returned row if provided in request
+      if (material.sub_category && data && !(data as any).sub_category) {
+        console.warn('createMaterial: sub_category sent but not returned. Check DB column & policies.');
       }
 
       return { data, error: null, success: true };

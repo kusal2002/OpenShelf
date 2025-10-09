@@ -4,7 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { downloadFile } from '../utils';
+import { downloadFile } from './download';
 import { Alert, Platform } from 'react-native';
 import { Material, MaterialCategory, ValidationError, FormErrors, SubCategory } from '../types';
 
