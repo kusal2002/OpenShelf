@@ -950,6 +950,180 @@ class SupabaseService {
       };
     }
   }
+
+  // Reviews Methods
+
+  /**
+   * Add or update a review for a material
+   */
+  async addReview(reviewData: {
+    user_id: string;
+    material_id: string;
+    rating: number;
+    comment: string | null;
+  }) {
+    try {
+      // Check if user already has a review for this material
+      const { data: existingReview, error: fetchError } = await supabase
+        .from('reviews')
+        .select('id')
+        .eq('user_id', reviewData.user_id)
+        .eq('material_id', reviewData.material_id)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      let result;
+      if (existingReview) {
+        // Update existing review
+        result = await supabase
+          .from('reviews')
+          .update({
+            rating: reviewData.rating,
+            comment: reviewData.comment,
+          })
+          .eq('id', existingReview.id);
+      } else {
+        // Insert new review
+        result = await supabase
+          .from('reviews')
+          .insert({
+            user_id: reviewData.user_id,
+            material_id: reviewData.material_id,
+            rating: reviewData.rating,
+            comment: reviewData.comment,
+          });
+      }
+
+      if (result.error) throw result.error;
+
+      // Update material's average rating
+      await this.updateMaterialAverageRating(reviewData.material_id);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error in addReview:', error);
+      return { success: false, error: error.message || 'Failed to add review' };
+    }
+  }
+
+  /**
+   * Update the average rating for a material
+   */
+  async updateMaterialAverageRating(materialId: string) {
+    try {
+      // Get all reviews for this material
+      const { data: reviews, error } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('material_id', materialId);
+
+      if (error) throw error;
+
+      if (reviews && reviews.length > 0) {
+        const totalRating = reviews.reduce((sum: number, review: any) => sum + review.rating, 0);
+        const averageRating = totalRating / reviews.length;
+
+        // Update material
+        await supabase
+          .from('materials')
+          .update({
+            average_rating: parseFloat(averageRating.toFixed(2)),
+            reviews_count: reviews.length,
+          })
+          .eq('id', materialId);
+      }
+    } catch (error) {
+      console.error('Error updating average rating:', error);
+    }
+  }
+
+  /**
+   * Get all reviews for a material
+   */
+  async getReviewsForMaterial(materialId: string) {
+    try {
+      console.log('=== Fetching reviews for material:', materialId);
+      
+      const { data: reviews, error } = await supabase
+        .from('reviews')
+        .select('id, user_id, material_id, rating, comment, created_at')
+        .eq('material_id', materialId)
+        .order('created_at', { ascending: false });
+
+      console.log('Raw reviews from DB:', JSON.stringify(reviews, null, 2));
+      console.log('Number of reviews fetched:', reviews?.length || 0);
+
+      if (error) {
+        console.error('Error fetching reviews:', error);
+        throw error;
+      }
+
+      // Fetch user profiles for each review
+      if (reviews && reviews.length > 0) {
+        console.log('Enriching reviews with user data...');
+        
+        const enrichedReviews = await Promise.all(
+          reviews.map(async (review, idx) => {
+            console.log(`Processing review ${idx + 1}/${reviews.length}, id: ${review.id}`);
+            
+            try {
+              // Try to get from users table first
+              const { data: userProfile, error: userError } = await supabase
+                .from('users')
+                .select('name, email')
+                .eq('id', review.user_id)
+                .single();
+
+              console.log(`User profile for review ${review.id}:`, userProfile);
+
+              if (userProfile) {
+                return {
+                  ...review,
+                  user: { 
+                    full_name: userProfile.name || 'Anonymous', 
+                    email: userProfile.email || '' 
+                  },
+                };
+              }
+
+              // Fallback to profiles table if users table doesn't have the data
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', review.user_id)
+                .single();
+
+              return {
+                ...review,
+                user: profile || { full_name: 'Anonymous', email: '' },
+              };
+            } catch (err) {
+              console.warn(`Failed to fetch user for review ${review.id}:`, err);
+              // If profile fetch fails, return review with default user
+              return {
+                ...review,
+                user: { full_name: 'Anonymous', email: '' },
+              };
+            }
+          })
+        );
+
+        console.log('Final enriched reviews count:', enrichedReviews.length);
+        console.log('Enriched reviews:', JSON.stringify(enrichedReviews, null, 2));
+        
+        return { data: enrichedReviews, error: null };
+      }
+
+      console.log('No reviews found or empty array');
+      return { data: reviews || [], error: null };
+    } catch (error: any) {
+      console.error('Error in getReviewsForMaterial:', error);
+      return { data: null, error: error.message || 'Failed to fetch reviews' };
+    }
+  }
 }
 
 // Create and export a singleton instance
