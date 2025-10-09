@@ -39,6 +39,7 @@ export interface Material {
   file_type: string; // 'pdf' | 'doc' | 'docx'
   user_id: string;
   category: MaterialCategory;
+  sub_category: SubCategory;
   description?: string;
   tags?: string[];
   is_public: boolean;
@@ -64,6 +65,16 @@ export type MaterialCategory =
   | 'Psychology'
   | 'Engineering'
   | 'Medicine'
+  | 'Other';
+
+  export type SubCategory = 
+  | 'Textbook'
+  | 'Notes'
+  | 'Presentation'
+  | 'Assignment'
+  | 'Research'
+  | 'Thesis'
+  | 'Reference'
   | 'Other';
 
 // Material Bookmark Type

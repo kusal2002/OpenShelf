@@ -20,15 +20,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-
 import { supabaseService } from '../services/supabase';
 import { 
   Material, 
   MainTabParamList, 
   MaterialCategory, 
+  SubCategory,
   LoadingState,
   AuthUser 
 } from '../types';
+import { SUB_CATEGORIES } from '../utils';
 import UploadMaterialModal from '../components/UploadMaterialModal';
 // Simple modern color scheme
 const colors = {
@@ -50,6 +51,7 @@ const colors = {
   warning700: '#B45309',
   danger: '#EF4444',
 };
+// selectedSubCat should be inside the component; declared below with other hooks
 
 const { width, height } = Dimensions.get('window');
 
@@ -65,13 +67,28 @@ declare global {
   namespace ReactNavigation {
     interface RootParamList {
       Library: LibraryScreenRouteParams | undefined;
+      Upload: { editMaterial?: Material } | undefined;
+      MaterialPreview: { material: Material };
+      MaterialDetails: { material: Material };
+      Login: undefined;
+      SignUp: undefined;
     }
   }
 }
 
+// Define the root stack param list for this app
+type RootStackParamList = {
+  Library: LibraryScreenRouteParams | undefined;
+  Upload: { editMaterial?: Material } | undefined;
+  MaterialPreview: { material: Material };
+  MaterialDetails: { material: Material };
+  Login: undefined;
+  SignUp: undefined;
+};
+
 // Ensure proper typing for the route params
 type LibraryScreenProps = NativeStackScreenProps<
-  { Library: LibraryScreenRouteParams },
+  RootStackParamList,
   'Library'
 >;
 
@@ -103,6 +120,9 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [bookmarkedMaterials, setBookmarkedMaterials] = useState<Material[]>([]);
 
+  // selectedSubCat moved here to ensure hooks run inside component scope
+  const [selectedSubCat, setSelectedSubCat] = useState<SubCategory | 'All'>('All');
+
   // Enhanced UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all' | 'bookmarks'>('all');
@@ -129,6 +149,7 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     { key: 'presentation', label: 'Presentations', icon: '🎭' },
     { key: 'assignment', label: 'Assignments', icon: '📋' },
     { key: 'research', label: 'Research', icon: '🔬' },
+    { key: 'thesis', label: 'Theses', icon: '🎓' },
     { key: 'reference', label: 'References', icon: '🔗' },
     { key: 'other', label: 'Other', icon: '📄' },
 ];
@@ -144,7 +165,12 @@ const fetchUserMaterials = useCallback(async (isRefresh = false) => {
   try {
     const response = await supabaseService.getUserMaterials(user.id);
     if (response.success && response.data) {
-      setMaterials(response.data);
+      // Normalize materials so `sub_category` is always present
+      const normalized = (response.data || []).map((m: any) => {
+        const sub = m.sub_category || m.subcategory || m.subCategory || 'Other';
+        return { ...m, sub_category: sub } as Material;
+      });
+      setMaterials(normalized);
     } else {
       console.error('Failed to fetch user materials:', response.error);
       Alert.alert('Error', response.error || 'Failed to load materials');
@@ -252,7 +278,14 @@ const toggleBookmark = useCallback(async (material: Material) => {
     } else {
       // Apply category filter for non-bookmark views
       if (selectedCategory !== 'all') {
-        result = result.filter(material => material.category === selectedCategory);
+        const selectedKey = String(selectedCategory).toLowerCase();
+        result = result.filter(material => {
+          // compare both category and sub_category (case-insensitive)
+          const cat = String(material.category || '').toLowerCase();
+          const m: any = material as any;
+          const sub = String(m.sub_category || m.subcategory || m.subCategory || '').toLowerCase();
+          return cat === selectedKey || sub === selectedKey;
+        });
       }
     }
 
@@ -269,32 +302,34 @@ const toggleBookmark = useCallback(async (material: Material) => {
     // Note: Category filter for non-bookmarks is already applied above
 
     // Apply sorting
-    switch (sortBy) {
-      case 'title':
-        result.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case 'category':
-        result.sort((a, b) => a.category.localeCompare(b.category));
-        break;
-      case 'downloads':
-        result.sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
-        break;
-      default: // date
-        result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }
+        switch (sortBy) {
+          case 'title':
+            result.sort((a, b) => a.title.localeCompare(b.title));
+            break;
+          case 'category':
+            result.sort((a, b) => a.category.localeCompare(b.category));
+            break;
+          case 'downloads':
+            result.sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
+            break;
+          case 'date':
+          default:
+            result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            break;
+        }
 
     setFilteredMaterials(result);
   }, [materials, bookmarkedMaterials, searchQuery, selectedCategory, sortBy]);
-
-  // Material actions
   const handleMaterialAction = useCallback((action: string, material: Material) => {
     setShowActionsModal(false);
     setSelectedMaterial(null);
 
     switch (action) {
       case 'view':
-        // Open the full-screen preview for this material
         navigation.navigate('MaterialPreview' as any, { material } as any);
+        break;
+      case 'edit':
+        navigation.navigate('Upload', { editMaterial: material } as any);
         break;
       case 'download':
         handleDownloadMaterial(material);
@@ -310,8 +345,7 @@ const toggleBookmark = useCallback(async (material: Material) => {
       case 'delete':
         handleDeleteMaterial(material);
         break;
-      case 'edit':
-        navigation.navigate('Upload', { editMaterial: material } as any);
+      default:
         break;
     }
   }, [navigation, toggleBookmark, applyFiltersAndSearch]);
@@ -436,7 +470,7 @@ useEffect(() => {
 
   useEffect(() => {
     applyFiltersAndSearch();
-  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch]);
+  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch, selectedSubCat]);
 
   // Custom modal components
   const renderSortModal = () => (
@@ -764,13 +798,14 @@ useEffect(() => {
           <View style={styles.divider} />
           <ScrollView style={styles.previewScrollContent}>
             {previewMaterial?.description && (
-              <Text style={[styles.materialDescription, styles.previewDescription]}>{previewMaterial.description}</Text>
+              <Text style={[styles.optionText, styles.previewDescription]}>
+                {previewMaterial.description}
+              </Text>
             )}
-            <Text style={styles.optionText}>Category: {previewMaterial?.category}</Text>
-            <Text style={styles.optionText}>Size: {previewMaterial ? (previewMaterial.file_size / 1_000_000).toFixed(2) : '--'} MB</Text>
-            <Text style={styles.optionText}>Uploaded: {previewMaterial ? new Date(previewMaterial.created_at).toLocaleDateString() : '--'}</Text>
             {previewMaterial?.download_count != null && (
-              <Text style={styles.optionText}>Downloads: {previewMaterial.download_count}</Text>
+              <Text style={styles.optionText}>
+                Downloads: {previewMaterial.download_count}
+              </Text>
             )}
           </ScrollView>
           <View style={styles.previewActionContainer}>
