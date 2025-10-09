@@ -31,6 +31,9 @@ import {
 } from '../types';
 import { SUB_CATEGORIES } from '../utils';
 import UploadMaterialModal from '../components/UploadMaterialModal';
+import { downloadFile } from '../utils/download';
+import { UIUtils, ErrorHandler } from '../utils';
+
 // Simple modern color scheme
 const colors = {
   primary: '#3B82F6',
@@ -353,11 +356,25 @@ const toggleBookmark = useCallback(async (material: Material) => {
   const handleDownloadMaterial = async (material: any) => {
     try {
       setLoading(prev => ({ ...prev, action: true }));
-      
-      Alert.alert('Download', `Downloading: ${material.title}`);
-      
+
+      const rawName = material.file_name || material.title;
+      let storagePath = '';
+      if (material.file_url) {
+        const parts = material.file_url.split('?')[0].split('/');
+        storagePath = parts.slice(-1)[0];
+      }
+      const desiredName = rawName.includes('.') ? rawName : `${rawName}.${material.file_type}`;
+
+      const result = await downloadFile(storagePath || material.file_url, desiredName);
+
+      if (result.success) {
+        await supabaseService.updateDownloadCount(material.id);
+        Alert.alert('Download Complete', `File saved to: ${result.localPath}`);
+      } else {
+        Alert.alert('Download Failed', result.error || 'An unknown error occurred.');
+      }
     } catch (error) {
-      console.error('Error downloading material:', error);
+      ErrorHandler.handle(error, 'Download error');
       Alert.alert('Error', 'Failed to download material. Please try again.');
     } finally {
       setLoading(prev => ({ ...prev, action: false }));
