@@ -43,11 +43,14 @@ CREATE TABLE IF NOT EXISTS public.reading_progress (
     UNIQUE(material_id, user_id)
 );
 
--- Create bookmarks table (for future implementation)
-CREATE TABLE IF NOT EXISTS public.bookmarks (
+-- Create search_queries table for analytics
+CREATE TABLE IF NOT EXISTS public.search_queries (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    material_id UUID REFERENCES public.materials(id) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+    query TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
+);
     page_number INTEGER NOT NULL,
     title VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
@@ -243,3 +246,24 @@ ALTER TABLE public.materials
 UPDATE public.materials
 SET sub_category = 'Other'
 WHERE sub_category IS NULL;
+
+-- Create indexes for search_queries table
+CREATE INDEX IF NOT EXISTS idx_search_queries_query ON public.search_queries(query);
+CREATE INDEX IF NOT EXISTS idx_search_queries_created_at ON public.search_queries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_search_queries_user_id ON public.search_queries(user_id);
+
+-- Enable Row Level Security for search_queries
+ALTER TABLE public.search_queries ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies for search_queries
+CREATE POLICY "Users can insert their own search queries" ON public.search_queries
+    FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE POLICY "Users can read their own search queries" ON public.search_queries
+    FOR SELECT USING (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE POLICY "Allow reading all search queries for analytics" ON public.search_queries
+    FOR SELECT USING (auth.role() = 'authenticated' OR auth.jwt() ->> 'role' = 'service_role');
+
+CREATE POLICY "Service role can read all search queries" ON public.search_queries
+    FOR SELECT USING (auth.jwt() ->> 'role' = 'service_role');

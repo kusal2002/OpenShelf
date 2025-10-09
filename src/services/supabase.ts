@@ -881,35 +881,98 @@ class SupabaseService {
     }
   }
 
-  // Future: AI Suggestions
   /**
-   * Placeholder for AI-powered study material suggestions
+   * Save a search query for analytics
    */
-  async getAISuggestions(userId: string, currentMaterialId?: string): Promise<ApiResponse<Material[]>> {
-    // TODO: Implement AI-powered suggestions
-    // - Analyze user's study history
-    // - Find related materials based on content similarity
-    // - Use collaborative filtering
-    // - Integrate with OpenAI for semantic understanding
-    
+  async saveSearchQuery(query: string, userId?: string): Promise<ApiResponse<null>> {
     try {
-      // Placeholder: return random materials for now
-      const { data, error } = await supabase
-        .from('materials')
-        .select('*')
-        .eq('is_public', true)
-        .limit(5);
+      const { error } = await supabase
+        .from('search_queries')
+        .insert([{
+          query: query.trim().toLowerCase(),
+          user_id: userId,
+          created_at: new Date().toISOString(),
+        }]);
 
       if (error) {
-        return { data: null, error: error.message, success: false };
+        // If table doesn't exist, silently fail for now
+        console.warn('Search query tracking not available:', error.message);
+        return { data: null, error: null, success: true };
       }
 
-      return { data: data || [], error: null, success: true };
+      return { data: null, error: null, success: true };
     } catch (error) {
+      // Silently fail if search tracking is not set up
+      console.warn('Search query tracking failed:', error);
+      return { data: null, error: null, success: true };
+    }
+  }
+
+  /**
+   * Get trending search queries
+   */
+  async getTrendingSearches(limit: number = 10): Promise<ApiResponse<string[]>> {
+    try {
+      console.log('Fetching trending searches from database...');
+      // Try to get trending searches from the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      console.log('Looking for searches since:', sevenDaysAgo.toISOString());
+
+      const { data, error } = await supabase
+        .from('search_queries')
+        .select('query')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1000); // Get recent searches to aggregate
+
+      console.log('Database query result:', { data: data?.length, error });
+
+      if (error) {
+        console.warn('Trending searches database error:', error.message);
+        // If table doesn't exist, return default trending searches
+        return {
+          data: ['Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 'Database Design', 'Computer Science', 'Mathematics', 'Physics', 'Chemistry'],
+          error: null,
+          success: true
+        };
+      }
+
+      // Aggregate and count queries
+      const queryCounts: { [key: string]: number } = {};
+      data?.forEach((item: any) => {
+        const query = item.query;
+        queryCounts[query] = (queryCounts[query] || 0) + 1;
+      });
+
+      console.log('Query counts:', queryCounts);
+
+      // Sort by frequency and get top queries
+      const trending = Object.entries(queryCounts)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, limit)
+        .map(([query]) => query);
+
+      console.log('Calculated trending searches:', trending);
+
+      // If we don't have enough trending searches, fill with defaults
+      const defaultSearches = ['Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 'Database Design'];
+      while (trending.length < limit && defaultSearches.length > 0) {
+        const defaultQuery = defaultSearches.shift();
+        if (defaultQuery && !trending.includes(defaultQuery)) {
+          trending.push(defaultQuery);
+        }
+      }
+
+      console.log('Final trending searches:', trending);
+            return { data: trending, error: null, success: true };
+    } catch (error) {
+      console.error('Trending searches error:', error);
+      // Fallback to default trending searches
       return {
-        data: null,
-        error: error instanceof Error ? error.message : 'AI suggestions failed',
-        success: false,
+        data: ['Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 'Database Design', 'Computer Science', 'Mathematics'],
+        error: null,
+        success: true
       };
     }
   }
