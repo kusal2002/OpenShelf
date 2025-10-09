@@ -935,11 +935,15 @@ useEffect(() => {
       {renderSortModal()}
       {renderActionsModal()}
   {renderPreviewModal()}
-      {materials.length > 0 && (
-        <TouchableOpacity style={styles.fab} onPress={() => setShowUploadModal(true)}>
-          <Text style={styles.fabIcon}>＋</Text>
-        </TouchableOpacity>
-      )}
+      
+            {/* Floating Action Button */}
+            <TouchableOpacity
+              style={styles.fab}
+              onPress={() => navigation.navigate('Upload' as any)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.fabIcon}>+</Text>
+            </TouchableOpacity>
       <UploadMaterialModal
         visible={showUploadModal}
         onClose={() => setShowUploadModal(false)}
