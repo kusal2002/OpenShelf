@@ -79,7 +79,34 @@ APP_ENV=development
    # into your Supabase SQL editor and execute
    ```
 
-### 5. Platform-Specific Setup
+### 5. Configure Google OAuth (Optional)
+
+#### Google Cloud Console Setup
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable Google+ API and Google Sign-In API
+4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"
+5. Set Application type to "Web application"
+6. Add authorized redirect URIs:
+   - `https://your-project-ref.supabase.co/auth/v1/callback`
+7. Copy the Client ID and add it to your `.env` file:
+   ```env
+   GOOGLE_WEB_CLIENT_ID=your-google-web-client-id-here
+   ```
+
+#### Supabase Dashboard Configuration
+1. Go to your Supabase project dashboard
+2. Navigate to Authentication → Providers
+3. Enable Google provider
+4. Add your Google Client ID and Client Secret
+5. Add authorized redirect URIs matching your app's scheme
+
+#### Android Configuration
+The Android configuration is already set up in the project files:
+- `android/app/build.gradle` includes Google Play Services
+- `android/app/src/main/AndroidManifest.xml` includes OAuth redirect intent filter
+
+### 6. Platform-Specific Setup
 
 #### Android
 ```bash

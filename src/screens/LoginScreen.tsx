@@ -3,7 +3,7 @@
  * Modern UI for user authentication with improved UX
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-import { supabaseService } from '../services/supabase';
+import { supabaseService, supabase } from '../services/supabase';
 import { 
   ValidationUtils, 
   UIUtils, 
@@ -42,6 +43,17 @@ export const LoginScreen = ({ navigation }: Props) => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Configure Google Sign-In
+  useEffect(() => {
+    console.log('Configuring Google Sign-In with Client ID:', process.env.GOOGLE_WEB_CLIENT_ID);
+    GoogleSignin.configure({
+      webClientId: process.env.GOOGLE_WEB_CLIENT_ID || '577584943883-j546dgee2caaasks0bkiiicb2ss4p4gj.apps.googleusercontent.com',
+      offlineAccess: false, // Set to false for mobile apps
+      forceCodeForRefreshToken: true,
+      scopes: ['profile', 'email'],
+    });
+  }, []);
 
   const validateForm = (): boolean => {
     const formErrors = ValidationUtils.validateForm(
@@ -96,6 +108,69 @@ export const LoginScreen = ({ navigation }: Props) => {
     } catch (error) {
       ErrorHandler.handle(error, 'Login error');
       UIUtils.showAlert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsLoading(true);
+
+      // Check if Google Play Services is available
+      const hasPlayServices = await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      if (!hasPlayServices) {
+        UIUtils.showAlert('Google Play Services', 'Google Play Services is not available or needs to be updated.');
+        return;
+      }
+
+      // Sign in with Google first
+      const userInfo = await GoogleSignin.signIn();
+      console.log('Google Sign-In successful:', userInfo);
+
+      // Get the ID token
+      const tokens = await GoogleSignin.getTokens();
+      console.log('Got tokens:', tokens);
+      
+      if (tokens.idToken) {
+        console.log('Attempting Supabase sign-in with token...');
+        // Sign in with Supabase using the Google ID token
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: tokens.idToken,
+        });
+
+        if (error) {
+          console.error('Supabase sign-in error:', error);
+          console.error('Error details:', JSON.stringify(error, null, 2));
+          UIUtils.showAlert('Google Sign In Failed', `Supabase error: ${error.message}`);
+          return;
+        }
+
+        if (data.user) {
+          UIUtils.showAlert(
+            '✅ Welcome!',
+            `Hello ${data.user.email}! You're now signed in with Google.`
+          );
+          // Navigation will be handled by auth state change
+        }
+      }
+    } catch (error) {
+      console.error('Google Sign-In error:', error);
+      
+      // Provide specific error handling
+      if (error.code === 'DEVELOPER_ERROR') {
+        UIUtils.showAlert(
+          'Configuration Error', 
+          'Google OAuth is not properly configured. Please check the setup guide in GOOGLE_OAUTH_SETUP.md'
+        );
+      } else if (error.code === 'SIGN_IN_CANCELLED') {
+        // User cancelled the sign-in flow
+        console.log('User cancelled Google Sign-In');
+      } else {
+        ErrorHandler.handle(error, 'Google sign-in error');
+        UIUtils.showAlert('Error', `Google sign-in failed: ${error.message || 'Please try again.'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -213,6 +288,26 @@ export const LoginScreen = ({ navigation }: Props) => {
           </View>
         ) : (
           <Text style={styles.primaryButtonText}>🚀 Sign In</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Google Sign In Button */}
+      <TouchableOpacity
+        style={[styles.googleButton, isLoading && styles.disabledButton]}
+        onPress={handleGoogleSignIn}
+        disabled={isLoading}
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={THEME_COLORS.text} />
+            <Text style={styles.googleButtonText}>Signing In...</Text>
+          </View>
+        ) : (
+          <View style={styles.googleButtonContent}>
+            <Text style={styles.googleIcon}>🌐</Text>
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </View>
         )}
       </TouchableOpacity>
 
@@ -395,6 +490,29 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     ...UI_CONSTANTS.typography.h6,
     color: THEME_COLORS.textInverse,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  googleButton: {
+    ...UIComponents.getButtonStyle('secondary'),
+    backgroundColor: THEME_COLORS.surface,
+    borderWidth: 2,
+    borderColor: THEME_COLORS.outline,
+    marginBottom: UI_CONSTANTS.spacing.lg,
+    ...UI_CONSTANTS.elevation[1],
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: UI_CONSTANTS.spacing.sm,
+  },
+  googleIcon: {
+    fontSize: 20,
+  },
+  googleButtonText: {
+    ...UI_CONSTANTS.typography.h6,
+    color: THEME_COLORS.text,
     fontWeight: '600',
     textAlign: 'center',
   },

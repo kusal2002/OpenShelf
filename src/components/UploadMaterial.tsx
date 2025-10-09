@@ -7,10 +7,12 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import DocumentPicker from 'react-native-document-picker';
 import { supabaseService } from '../services/supabase';
-import { MaterialCategory, FileUpload } from '../types';
+import { MaterialCategory, FileUpload, SubCategory } from '../types';
+import { SUB_CATEGORIES } from '../utils';
 
 interface Props {
   userId: string;
@@ -24,6 +26,8 @@ const UploadMaterial: React.FC<Props> = ({ userId, category, onUploaded }) => {
   const [file, setFile] = useState<FileUpload | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
+  const defaultSub: SubCategory = (SUB_CATEGORIES.find(sc => sc.toLowerCase() === String(category).toLowerCase()) as SubCategory) || 'Other';
+  const [selectedSubCat, setSelectedSubCat] = useState<SubCategory>(defaultSub);
 
   // 📂 Pick a file
   const handlePickFile = async () => {
@@ -77,6 +81,7 @@ const UploadMaterial: React.FC<Props> = ({ userId, category, onUploaded }) => {
         title,
         description,
         category,
+        sub_category: selectedSubCat as any,
         user_id: userId,
         file_url: fileUrl,
         file_name: file.name,
@@ -108,6 +113,19 @@ const UploadMaterial: React.FC<Props> = ({ userId, category, onUploaded }) => {
       <Text style={styles.heading}>
         Upload {category.charAt(0).toUpperCase() + category.slice(1)}
       </Text>
+
+      {/* Subcategory selector */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subcategoryScroll} contentContainerStyle={{ paddingVertical: 8 }}>
+        {SUB_CATEGORIES.map(sc => (
+          <TouchableOpacity
+            key={sc}
+            style={[styles.subcategoryChip, selectedSubCat === sc && styles.subcategoryChipActive]}
+            onPress={() => setSelectedSubCat(sc)}
+          >
+            <Text style={[styles.subcategoryText, selectedSubCat === sc && styles.subcategoryTextActive]}>{sc}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* File picker */}
       <TouchableOpacity style={styles.filePicker} onPress={handlePickFile}>
@@ -219,6 +237,26 @@ toggleThumb: {
 },
 toggleThumbActive: {
   alignSelf: 'flex-end',
+},
+subcategoryScroll: {
+  marginBottom: 12,
+},
+subcategoryChip: {
+  backgroundColor: '#F3F4F6',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  marginRight: 8,
+},
+subcategoryChipActive: {
+  backgroundColor: '#3B82F6',
+},
+subcategoryText: {
+  color: '#374151',
+  fontSize: 13,
+},
+subcategoryTextActive: {
+  color: '#fff',
 },
 
 });

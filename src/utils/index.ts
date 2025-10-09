@@ -4,9 +4,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { downloadFile } from '../utils';
+import { downloadFile } from './download';
 import { Alert, Platform } from 'react-native';
-import { Material, MaterialCategory, ValidationError, FormErrors } from '../types';
+import { Material, MaterialCategory, ValidationError, FormErrors, SubCategory } from '../types';
 
 // Storage Keys
 export const STORAGE_KEYS = {
@@ -511,6 +511,17 @@ export const MATERIAL_CATEGORIES: MaterialCategory[] = [
   'Psychology',
   'Engineering',
   'Medicine',
+  'Other',
+];
+
+export const SUB_CATEGORIES: SubCategory[] = [
+  'Textbook',
+  'Notes',
+  'Presentation',
+  'Assignment',
+  'Research',
+  'Thesis',
+  'Reference',
   'Other',
 ];
 

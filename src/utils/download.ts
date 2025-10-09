@@ -23,8 +23,7 @@ async function requestStoragePermission(): Promise<boolean> {
       PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
       {
         title: 'Storage Permission',
-        message: 'We need access to your storage to save study materials',
-        buttonNeutral: 'Ask Me Later',
+        message: 'We need access to save files into your Downloads/OpenShelf folder',
         buttonNegative: 'Cancel',
         buttonPositive: 'OK',
       },
@@ -72,56 +71,68 @@ export async function downloadFile(
       permissionGranted = await requestStoragePermission();
     }
 
-// Choose directory
-let dir: string;
+    // Choose directory (with fallback strategy)
+    let primaryDir: string;
+    let fallbackDir: string = RNFS.DocumentDirectoryPath;
+    let usingFallback = false;
+    let savedInPublicDir = false;
 
-let savedInPublicDir = false;
-if (Platform.OS === 'ios') {
-  dir = RNFS.DocumentDirectoryPath; // iOS sandbox docs
-} else {
-  if (Platform.OS === 'android' && RNFS.DownloadDirectoryPath) {
-  // Force use of system Downloads folder
-  dir = RNFS.DownloadDirectoryPath;
-  try { await RNFS.mkdir(dir); } catch {}
-  savedInPublicDir = true;
-} else {
-  dir = RNFS.DocumentDirectoryPath;
-}
-}
-
-// Final path
-const targetPath = `${dir}/${fileName}`.replace(/\\+/g, '/');
-
-    // Download
-    const download = RNFS.downloadFile({
-      fromUrl: signedUrl,
-      toFile: targetPath,
-      discretionary: true,
-      cacheable: false,
-      progressDivider: 5,
-      begin: (res) => {
-        console.log('Download started. Content length:', res.contentLength);
-      },
-      progress: (res) => {
-        if (options.onProgress) {
-          const percentage =
-            res.contentLength > 0 ? (res.bytesWritten / res.contentLength) * 100 : 0;
-          options.onProgress({
-            bytesWritten: res.bytesWritten,
-            contentLength: res.contentLength,
-            percentage,
-          });
-        }
-      },
-    });
-
-    const { statusCode, bytesWritten } = await download.promise;
-    if (statusCode && statusCode >= 400) {
-      throw new Error(`Download failed with status ${statusCode}`);
+    if (Platform.OS === 'ios') {
+      primaryDir = RNFS.DocumentDirectoryPath;
+    } else if (Platform.OS === 'android' && RNFS.DownloadDirectoryPath) {
+      primaryDir = RNFS.DownloadDirectoryPath; // public Downloads
+      savedInPublicDir = true;
+    } else {
+      primaryDir = RNFS.DocumentDirectoryPath;
     }
-    if (!bytesWritten || bytesWritten === 0) {
-      throw new Error('Downloaded file is empty');
+
+    // Ensure primary directory exists
+    try { await RNFS.mkdir(primaryDir); } catch {}
+
+    // Sanitize filename
+    fileName = fileName.replace(/[/\\]/g, '_').trim() || 'file';
+    const buildPath = (base: string, name: string) => `${base}/${name}`.replace(/\\+/g, '/');
+    let targetPath = buildPath(primaryDir, fileName);
+
+    const attemptDownload = async (path: string) => {
+      const task = RNFS.downloadFile({
+        fromUrl: signedUrl!,
+        toFile: path,
+        discretionary: true,
+        cacheable: false,
+        progressDivider: 5,
+        begin: (res) => {
+          console.log('Download begin -> path:', path, 'size:', res.contentLength);
+        },
+        progress: (res) => {
+          if (options.onProgress) {
+            const percentage = res.contentLength > 0 ? (res.bytesWritten / res.contentLength) * 100 : 0;
+            options.onProgress({ bytesWritten: res.bytesWritten, contentLength: res.contentLength, percentage });
+          }
+        },
+      });
+      return task.promise;
+    };
+
+    let statusCode: number | undefined; let bytesWritten: number | undefined;
+    try {
+      ({ statusCode, bytesWritten } = await attemptDownload(targetPath));
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      if (/ENOENT/i.test(msg) && !usingFallback && primaryDir !== fallbackDir) {
+        console.warn('Primary download path failed with ENOENT, retrying in fallback directory');
+        usingFallback = true;
+        savedInPublicDir = false;
+        targetPath = buildPath(fallbackDir, fileName);
+        try { await RNFS.mkdir(fallbackDir); } catch {}
+        ({ statusCode, bytesWritten } = await attemptDownload(targetPath));
+      } else {
+        throw err;
+      }
     }
+
+    if (statusCode && statusCode >= 400) throw new Error(`Download failed with status ${statusCode}`);
+    if (!bytesWritten || bytesWritten === 0) throw new Error('Downloaded file is empty');
 
     // Optionally share file
     if (options.share) {

@@ -40,12 +40,13 @@ import {
   MATERIAL_CATEGORIES,
   FILE_ICONS,
 } from '../utils';
+import { FloatingAction } from "react-native-floating-action";
 
 const { width: screenWidth } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<MainTabParamList, 'Home'>;
 
-export const HomeScreenold = ({ navigation }: Props) => {
+export const HomeScreen = ({ navigation }: Props) => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [filteredMaterials, setFiltereredMaterials] = useState<Material[]>([]);
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({});
@@ -57,6 +58,7 @@ export const HomeScreenold = ({ navigation }: Props) => {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     const unsubscribe = NetworkUtils.subscribeToNetworkStatus(setIsOnline);
@@ -404,8 +406,10 @@ export const HomeScreenold = ({ navigation }: Props) => {
   );
 
   const renderMaterialCard = ({ item }: { item: Material }) => (
-    <View
+    <TouchableOpacity
       style={styles.materialCard}
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('MaterialDetails' as any, { material: item } as any)}
     >
       <View style={styles.materialHeader}>
         <View style={styles.materialIcon}>
@@ -483,7 +487,7 @@ export const HomeScreenold = ({ navigation }: Props) => {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderEmptyState = () => (
@@ -572,8 +576,7 @@ export const HomeScreenold = ({ navigation }: Props) => {
         </View>
       </SafeAreaView>
     );
-  }
-
+  };
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
@@ -602,6 +605,15 @@ export const HomeScreenold = ({ navigation }: Props) => {
         onEndReachedThreshold={0.1}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+      />
+
+      {/* floating action button for uploading new materials */}
+
+      <FloatingAction
+        actions={[]}
+        onPressMain={() => navigation.navigate('Upload')}
+        color={THEME_COLORS.primary}
+        floatingIcon={<Text style={{ color: THEME_COLORS.white, fontSize: 24 }}>+</Text>}
       />
     </SafeAreaView>
   );
@@ -967,6 +979,23 @@ const styles = StyleSheet.create({
     ...UI_CONSTANTS.typography.body2,
     color: THEME_COLORS.textSecondary,
   },
+  fab: {
+    position: 'absolute',
+    right: UI_CONSTANTS.spacing.lg,
+    bottom: UI_CONSTANTS.spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: THEME_COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...UI_CONSTANTS.elevation[3],
+  },
+  fabIcon: {
+    color: THEME_COLORS.textInverse,
+    fontSize: 28,
+    lineHeight: 28,
+    marginTop: -1,
+  },
 });
-
-export default HomeScreenold;
+export default HomeScreen;

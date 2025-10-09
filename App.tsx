@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { StatusBar, Alert, ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -21,6 +22,13 @@ import HomeScreen from './src/screens/HomeScreen';
 import UploadScreen from './src/screens/UploadScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import MaterialDetailsScreen from './src/screens/MaterialDetailsScreen';
+import MaterialPreviewScreen from './src/screens/MaterialPreviewScreen';
+
+// Onboarding screens
+import Onboarding1Screen from './src/screens/Onboarding1Screen';
+import Onboarding2Screen from './src/screens/Onboarding2Screen';
+import Onboarding3Screen from './src/screens/Onboarding3Screen';
 
 // Types
 import { AuthState, AuthUser } from './src/types';
@@ -47,6 +55,22 @@ function AuthStack() {
     >
       <SScreen name="Login" component={LoginScreen} options={{ title: 'Login' }} />
       <SScreen name="SignUp" component={SignUpScreen} options={{ title: 'Create Account' }} />
+    </SNav>
+  );
+}
+
+// Onboarding Stack shown before login (only while not completed)
+function OnboardingStack() {
+  const SNav: any = Stack.Navigator;
+  const SScreen: any = Stack.Screen;
+  return (
+    <SNav initialRouteName="Onboarding1" screenOptions={{ headerShown: false }}>
+      <SScreen name="Onboarding1" component={Onboarding1Screen} />
+      <SScreen name="Onboarding2" component={Onboarding2Screen} />
+      <SScreen name="Onboarding3" component={Onboarding3Screen} />
+      {/** include Login/SignUp so navigation.replace('Login') from onboarding works */}
+      <SScreen name="Login" component={LoginScreen} />
+      <SScreen name="SignUp" component={SignUpScreen} />
     </SNav>
   );
 }
@@ -116,6 +140,8 @@ export default function App() {
   });
 
   const [isOnline, setIsOnline] = useState(true);
+  // Force onboarding to show every time before login
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean>(false);
 
   useEffect(() => {
     // Monitor network connectivity
@@ -123,6 +149,7 @@ export default function App() {
 
     // Initialize auth state
     initializeAuth();
+    loadOnboardingStatus();
 
     // Listen for auth state changes
     const authListener = onAuthStateChange((event: any, session: any) => {
@@ -169,6 +196,11 @@ export default function App() {
       }
     };
   }, []);
+
+  const loadOnboardingStatus = async () => {
+    // Intentionally ignore stored flag so onboarding shows every time
+    setOnboardingComplete(false);
+  };
 
   const initializeAuth = async () => {
     try {
@@ -235,8 +267,8 @@ export default function App() {
     }
   }, [isOnline]);
 
-  // Show loading screen while initializing
-  if (authState.loading) {
+  // Show loading screen while initializing auth or onboarding status
+  if (authState.loading || onboardingComplete === null) {
     return (
       <SafeAreaProvider>
         <StatusBar
@@ -247,6 +279,9 @@ export default function App() {
       </SafeAreaProvider>
     );
   }
+
+  // debug: show auth + onboarding state each render
+  console.log('[DEBUG] auth:isAuthenticated =', authState.isAuthenticated, 'onboardingComplete =', onboardingComplete);
 
   return (
     <SafeAreaProvider>
@@ -262,13 +297,16 @@ export default function App() {
             return (
               <SNav screenOptions={{ headerShown: false }}>
                 <SScreen name="Main" component={MainTabs} />
+                <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
+                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
                 {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
                 {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
               </SNav>
             );
           })()
         ) : (
-          <AuthStack />
+          // If user not authenticated show onboarding first when needed
+          onboardingComplete ? <AuthStack /> : <OnboardingStack />
         )}
       </NavigationContainer>
     </SafeAreaProvider>
