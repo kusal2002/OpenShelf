@@ -53,9 +53,7 @@ export default function UserProfileScreen({ route, navigation }: any) {
       fetchUserProfile();
       fetchUserMaterials();
       checkIfOwnProfile();
-      if (!isOwnProfile) {
-        checkFollowStatus();
-      }
+      checkFollowStatus();
     }
   }, [userId]);
 
@@ -82,8 +80,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
       }
       
       if (data) {
-        // Fetch real-time follower counts
-        await refreshFollowerCounts(data);
         setProfile(data);
       }
     } catch (err) {
@@ -91,19 +87,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
       Alert.alert('Error', 'Failed to load user profile.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const refreshFollowerCounts = async (profileData: UserProfile) => {
-    try {
-      // Get current followers count
-      const followersResponse = await supabaseService.getFollowers(userId);
-      const followingResponse = await supabaseService.getFollowing(userId);
-      
-      profileData.followers_count = followersResponse.data?.length || 0;
-      profileData.following_count = followingResponse.data?.length || 0;
-    } catch (err) {
-      console.warn('Failed to refresh follower counts:', err);
     }
   };
 
@@ -181,13 +164,9 @@ export default function UserProfileScreen({ route, navigation }: any) {
         if (res && res.success !== false) {
           setIsFollowing(false);
           UIUtils.showAlert('Unfollowed', `You are no longer following ${profile?.name || userName}.`);
-          // Refresh follower count from server
+          // Update follower count
           if (profile) {
-            const updatedFollowersResponse = await supabaseService.getFollowers(userId);
-            setProfile(prev => prev ? { 
-              ...prev, 
-              followers_count: updatedFollowersResponse.data?.length || 0 
-            } : null);
+            setProfile(prev => prev ? { ...prev, followers_count: Math.max(0, (prev.followers_count || 0) - 1) } : null);
           }
         } else {
           throw res?.error || new Error('Failed to unfollow user');
@@ -197,13 +176,9 @@ export default function UserProfileScreen({ route, navigation }: any) {
         if (res && res.success) {
           setIsFollowing(true);
           UIUtils.showAlert('Following', `You are now following ${profile?.name || userName}!`);
-          // Refresh follower count from server
+          // Update follower count
           if (profile) {
-            const updatedFollowersResponse = await supabaseService.getFollowers(userId);
-            setProfile(prev => prev ? { 
-              ...prev, 
-              followers_count: updatedFollowersResponse.data?.length || 0 
-            } : null);
+            setProfile(prev => prev ? { ...prev, followers_count: (prev.followers_count || 0) + 1 } : null);
           }
         } else {
           throw res?.error || new Error('Failed to follow user');
@@ -262,38 +237,15 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Navigation Header */}
-      <View style={styles.navigationHeader}>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            Profile
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {profile?.name || userName || 'User Profile'}
-          </Text>
-        </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => {
-              // TODO: Implement more options (share profile, report, etc.)
-              UIUtils.showAlert('More Options', 'Additional options coming soon!');
-            }}
-          >
-            <Text style={styles.headerButtonIcon}>⋯</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* overlay back button so top bar can remain hidden */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => navigation.goBack()}
+        style={styles.overlayBackButton}
+      >
+        <Text style={styles.overlayBackIcon}>←</Text>
+      </TouchableOpacity>
 
       <ScrollView style={styles.container}>
         {/* Profile Header */}
@@ -320,7 +272,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
             </Text>
           </View>
 
-          {/*
           {!isOwnProfile && (
             <TouchableOpacity
               style={[styles.followButton, isFollowing ? styles.followingButton : null]}
@@ -336,7 +287,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
               )}
             </TouchableOpacity>
           )}
-          */}
         </View>
 
         {/* Stats */}
@@ -350,10 +300,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
             <Text style={styles.statLabel}>Followers</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {materials.reduce((total, material) => total + (material.download_count || 0), 0)}
-            </Text>
-            <Text style={styles.statLabel}>Downloads</Text>
+            <Text style={styles.statNumber}>{profile?.following_count || 0}</Text>
+            <Text style={styles.statLabel}>Following</Text>
           </View>
         </View>
 
@@ -426,12 +374,6 @@ export default function UserProfileScreen({ route, navigation }: any) {
                 </View>
               )}
               <View style={styles.aboutItem}>
-                <Text style={styles.aboutLabel}>Total Downloads:</Text>
-                <Text style={styles.aboutValue}>
-                  {materials.reduce((total, material) => total + (material.download_count || 0), 0)} downloads
-                </Text>
-              </View>
-              <View style={styles.aboutItem}>
                 <Text style={styles.aboutLabel}>Member since:</Text>
                 <Text style={styles.aboutValue}>
                   {profile?.created_at ? DateUtils.formatDate(profile.created_at) : 'Recently'}
@@ -447,60 +389,22 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: THEME_COLORS.background },
-  navigationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: UI_CONSTANTS.spacing.md,
-    paddingVertical: UI_CONSTANTS.spacing.sm,
+  overlayBackButton: {
+    position: 'absolute',
+    top: UI_CONSTANTS.spacing.sm + 4,
+    left: UI_CONSTANTS.spacing.sm + 4,
+    zIndex: 50,
     backgroundColor: THEME_COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.outline,
-    ...UI_CONSTANTS.elevation[1],
-  },
-  backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: THEME_COLORS.surfaceVariant,
+    ...UI_CONSTANTS.elevation[2],
   },
-  backIcon: {
+  overlayBackIcon: {
     color: THEME_COLORS.text,
     fontSize: 20,
-    fontWeight: '600',
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: UI_CONSTANTS.spacing.md,
-  },
-  headerTitle: {
-    ...UI_CONSTANTS.typography.h6,
-    color: THEME_COLORS.text,
-    fontWeight: '600',
-  },
-  headerSubtitle: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
-    marginTop: 2,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: THEME_COLORS.surfaceVariant,
-  },
-  headerButtonIcon: {
-    color: THEME_COLORS.text,
-    fontSize: 18,
     fontWeight: '600',
   },
   container: { flex: 1 },
@@ -711,37 +615,5 @@ const styles = StyleSheet.create({
     ...UI_CONSTANTS.typography.body2,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  aboutSection: {
-    backgroundColor: THEME_COLORS.surface,
-    borderRadius: UI_CONSTANTS.borderRadius.md,
-    padding: UI_CONSTANTS.spacing.lg,
-    ...UI_CONSTANTS.elevation[1],
-  },
-  aboutTitle: {
-    color: THEME_COLORS.text,
-    ...UI_CONSTANTS.typography.h6,
-    fontWeight: '600',
-    marginBottom: UI_CONSTANTS.spacing.md,
-  },
-  aboutItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: UI_CONSTANTS.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: THEME_COLORS.surfaceVariant,
-  },
-  aboutLabel: {
-    color: THEME_COLORS.textSecondary,
-    ...UI_CONSTANTS.typography.body2,
-    fontWeight: '500',
-  },
-  aboutValue: {
-    color: THEME_COLORS.text,
-    ...UI_CONSTANTS.typography.body2,
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: UI_CONSTANTS.spacing.md,
   },
 });
