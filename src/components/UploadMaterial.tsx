@@ -88,6 +88,7 @@ const UploadMaterial: React.FC<Props> = ({ userId, category, onUploaded }) => {
         file_size: file.size,
         file_type: file.name.split('.').pop() || 'unknown',
         is_public: isPublic,
+        is_free: true,
         download_count: 0,
       };
 

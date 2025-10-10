@@ -19,6 +19,7 @@ import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import SearchScreen from './src/screens/SearchScreen';
 import UploadScreen from './src/screens/UploadScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -101,6 +102,7 @@ function MainTabs() {
       }}
     >
       <TScreen name="Home" component={HomeScreen} options={{ title: 'Discover', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🏠</Text>) }} />
+      <TScreen name="Search" component={SearchScreen} options={{ title: 'Search', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🔍</Text>) }} />
       <TScreen name="Upload" component={UploadScreen} options={{ title: 'Upload', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>⬆️</Text>) }} />
       <TScreen name="Library" component={LibraryScreen} options={{ title: 'My Library', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>📚</Text>) }} />
       <TScreen name="Profile" component={ProfileScreen} options={{ title: 'Profile', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>👤</Text>) }} />

@@ -49,6 +49,8 @@ export interface Material {
   download_count?: number;
   average_rating?: number;
   reviews_count?: number;
+  // Indicates whether the resource is free to access/download
+  is_free: boolean;
   created_at: string;
   updated_at: string;
   
@@ -160,6 +162,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
+  Search: undefined;
   Upload: undefined;
   Library: undefined;
   Profile: undefined;
