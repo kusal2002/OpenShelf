@@ -43,6 +43,8 @@ export interface Material {
   description?: string;
   tags?: string[];
   is_public: boolean;
+  // Indicates whether the resource is free to access/download
+  is_free: boolean;
   download_count: number;
   created_at: string;
   updated_at: string;

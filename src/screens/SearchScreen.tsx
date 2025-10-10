@@ -135,9 +135,8 @@ export const SearchScreen = ({ navigation }: Props) => {
 
     setIsLoading(true);
     try {
-      // TODO: Implement AI-powered semantic search
-      // For now, use basic text search
-      const response = await supabaseService.searchMaterials(query);
+  // Use AI-powered semantic search (falls back to basic search if HF key missing)
+  const response = await supabaseService.semanticSearchMaterials(query, { limit: 50 });
       
       if (response.success && response.data) {
         setSearchResults(response.data);

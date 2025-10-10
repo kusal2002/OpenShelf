@@ -293,6 +293,7 @@ const UploadScreen: React.FC<Props> = ({ navigation }) => {
         description: form.description.trim() || undefined,
         tags: form.tags.trim() ? form.tags.split(',').map(tag => tag.trim()) : undefined,
         is_public: form.isPublic,
+        is_free: true,
         download_count: 0,
       };
 

@@ -67,11 +67,38 @@ export { supabase };
 
 class SupabaseService {
   private isClientReady: boolean = false;
+  private hfApiKey?: string;
+  private hfModel: string = 'sentence-transformers/all-MiniLM-L6-v2';
 
   constructor() {
     this.isClientReady = supabase && typeof supabase.auth !== 'undefined';
     if (!this.isClientReady) {
       console.warn('Supabase client not properly initialized');
+    }
+
+    // Prefer explicit env var from React Native dotenv if present; fall back to process.env
+    // Prefer RN dotenv import (if available); fallback to process.env in Node/dev
+    let rnEnvKey: string | undefined;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      rnEnvKey = require('@env').HUGGINGFACE_API_KEY;
+    } catch (_) {
+      rnEnvKey = undefined;
+    }
+    this.hfApiKey = rnEnvKey || (process.env.HUGGINGFACE_API_KEY as string) || undefined;
+    // Optional: model override via env
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const rnEnvModel = require('@env').HUGGINGFACE_EMBEDDING_MODEL as string | undefined;
+      if (rnEnvModel && typeof rnEnvModel === 'string') {
+        this.hfModel = rnEnvModel;
+      } else if (typeof process.env.HUGGINGFACE_EMBEDDING_MODEL === 'string') {
+        this.hfModel = process.env.HUGGINGFACE_EMBEDDING_MODEL as string;
+      }
+    } catch (_) {
+      if (typeof process.env.HUGGINGFACE_EMBEDDING_MODEL === 'string') {
+        this.hfModel = process.env.HUGGINGFACE_EMBEDDING_MODEL as string;
+      }
     }
   }
 
@@ -594,8 +621,7 @@ class SupabaseService {
     try {
       let queryBuilder = supabase
         .from('materials')
-        .select('*')
-        .eq('is_public', true);
+        .select('*');
 
       if (category) {
         queryBuilder = queryBuilder.eq('category', category);
@@ -621,6 +647,189 @@ class SupabaseService {
         success: false,
       };
     }
+  }
+
+  /**
+   * Semantic search using Hugging Face Inference API
+   * Strategy:
+   * 1) Fetch a candidate set from Supabase with simple filters (top N recent/public)
+   * 2) Create strings per material (title + description + tags)
+   * 3) Use HF sentence-similarity pipeline to score query vs candidates
+   * 4) Sort by score desc and return top K
+   * If HF key is not configured, falls back to searchMaterials.
+   */
+  async semanticSearchMaterials(query: string, options?: { limit?: number; candidateLimit?: number; category?: MaterialCategory; subCategory?: SubCategory }): Promise<ApiResponse<Material[]>> {
+    const limit = options?.limit ?? 20;
+    const candidateLimit = options?.candidateLimit ?? 100;
+    const category = options?.category;
+    const subCategory = options?.subCategory;
+
+    try {
+  // 1) Build a keyword-matched candidate set first; only fill with recent items if no matches
+      const qRaw = String(query || '').trim();
+      const qIlike = qRaw.replace(/%/g, '\\%');
+
+      // Base builder with structured filters (no visibility filter; rely on RLS)
+      const baseBuilder = () => {
+        let qb = supabase
+          .from('materials')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (category) qb = qb.eq('category', category);
+        if (subCategory) qb = qb.eq('sub_category', subCategory);
+        return qb;
+      };
+
+      // 1a) Keyword candidates
+      let kwBuilder = baseBuilder();
+      kwBuilder = kwBuilder
+        .or(`title.ilike.%${qIlike}%,description.ilike.%${qIlike}%,tags.cs.{${qRaw}}`)
+        .limit(candidateLimit);
+      const { data: kwCandidates, error: kwErr } = await kwBuilder;
+      if (kwErr) {
+        return { data: null, error: kwErr.message, success: false };
+      }
+
+      const kwList = kwCandidates || [];
+
+      // 1b) Fallback recent candidates if too few keyword hits
+      let combined: any[] = [...kwList];
+      if (combined.length === 0) {
+        let recentBuilder = baseBuilder().limit(candidateLimit);
+        const { data: recent, error: recErr } = await recentBuilder;
+        if (recErr) {
+          return { data: null, error: recErr.message, success: false };
+        }
+        const recentList = recent || [];
+        const seen = new Set(combined.map((m) => m.id));
+        for (const m of recentList) {
+          if (!seen.has(m.id)) {
+            combined.push(m);
+            seen.add(m.id);
+            if (combined.length >= candidateLimit) break;
+          }
+        }
+      }
+      // Cap at candidateLimit always
+      combined = combined.slice(0, candidateLimit);
+
+      if (combined.length === 0) {
+        return { data: [], error: null, success: true };
+      }
+
+      // 2) Compute keyword scores for all candidates
+      const qTokens = this.tokenize(qRaw);
+      const kwScores = combined.map((m) => this.computeKeywordScore(m, qTokens));
+      const kwMax = kwScores.length ? Math.max(...kwScores) : 0;
+      const kwNorm = kwScores.map((s) => (kwMax > 0 ? s / kwMax : 0));
+
+      // 3) If HF key present, compute semantic similarity; else rely on keyword score only
+  let final: { m: any; score: number; sem?: number; kw?: number }[] = [];
+  const MIN_SEM = 0.35;
+  const MIN_KW = 0.2;
+      if (this.hfApiKey) {
+        const candidateTexts = combined.map((m) => this.composeMaterialText(m));
+        const body = {
+          inputs: {
+            source_sentence: qRaw,
+            sentences: candidateTexts,
+          },
+        } as any;
+
+        const resp = await fetch(`https://api-inference.huggingface.co/models/${encodeURIComponent(this.hfModel)}?wait_for_model=true`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.hfApiKey}`,
+            'Content-Type': 'application/json',
+            'X-Wait-For-Model': 'true',
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          console.warn('HF API error:', resp.status, errText);
+          // Fallback to keyword-only ranking
+          final = combined.map((m, i) => ({ m, score: kwNorm[i] || 0, kw: kwNorm[i] || 0 }));
+        } else {
+          const semScores: number[] = await resp.json();
+          // Blend semantic and keyword scores; bias toward semantic
+          final = combined.map((m, i) => {
+            const s = (semScores[i] ?? 0);
+            const k = kwNorm[i] ?? 0;
+            const blended = 0.85 * s + 0.15 * k;
+            return { m, score: blended, sem: s, kw: k };
+          });
+        }
+      } else {
+        console.warn('Hugging Face API key not configured. Using keyword ranking only.');
+        final = combined.map((m, i) => ({ m, score: kwNorm[i] || 0, kw: kwNorm[i] || 0 }));
+      }
+
+      // 4) Filter out low-relevance items, then sort and return top-N
+      const filtered = final.filter((x) => {
+        // If we have semantic scores, require either decent semantic or decent keyword
+        if (typeof x.sem === 'number') {
+          return (x.sem >= MIN_SEM) || ((x.kw ?? 0) >= MIN_KW);
+        }
+        // Keyword-only mode: require any keyword match above threshold
+        return (x.kw ?? x.score) > 0; // keep only items with some keyword match
+      });
+
+      const ranked = (filtered.length ? filtered : final)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((x) => x.m);
+
+      return { data: ranked, error: null, success: true };
+    } catch (e) {
+      console.warn('semanticSearchMaterials failed, falling back. Error:', e);
+      return this.searchMaterials(query, category, subCategory);
+    }
+  }
+
+  private tokenize(text: string): string[] {
+    return String(text || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter(Boolean);
+  }
+
+  private computeKeywordScore(m: any, qTokens: string[]): number {
+    if (!qTokens.length) return 0;
+    const title = String(m.title || '').toLowerCase();
+    const desc = String(m.description || '').toLowerCase();
+    const tagsStr = Array.isArray(m.tags) ? m.tags.join(' ').toLowerCase() : '';
+    const cat = String(m.category || '').toLowerCase();
+    const sub = String(m.sub_category || '').toLowerCase();
+
+    let score = 0;
+    const wTitle = 2.0;
+    const wDesc = 1.0;
+    const wTags = 1.5;
+    const wCat = 0.8;
+    const wSub = 1.0;
+
+    for (const t of qTokens) {
+      if (!t) continue;
+      if (title.includes(t)) score += wTitle;
+      if (desc.includes(t)) score += wDesc;
+      if (tagsStr.includes(t)) score += wTags;
+      if (cat === t) score += wCat;
+      if (sub.includes(t)) score += wSub; // allow partial for sub-category
+    }
+    return score;
+  }
+
+  private composeMaterialText(m: any): string {
+    const parts: string[] = [];
+    if (m.file_name) parts.push(String(m.file_name));
+    if (m.title) parts.push(String(m.title));
+    if (m.description) parts.push(String(m.description));
+    if (Array.isArray(m.tags) && m.tags.length) parts.push(m.tags.join(', '));
+    if (m.category) parts.push(String(m.category));
+    if (m.sub_category) parts.push(String(m.sub_category));
+    return parts.join(' | ');
   }
 
   /**
