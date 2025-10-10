@@ -24,6 +24,7 @@ import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MaterialDetailsScreen from './src/screens/MaterialDetailsScreen';
 import MaterialPreviewScreen from './src/screens/MaterialPreviewScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
 
 // Onboarding screens
 import Onboarding1Screen from './src/screens/Onboarding1Screen';
@@ -299,6 +300,7 @@ export default function App() {
                 <SScreen name="Main" component={MainTabs} />
                 <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
                 <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
+                <SScreen name="UserProfile" component={UserProfileScreen} options={{ headerShown: true, title: 'Profile' }} />
                 {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
                 {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
               </SNav>

@@ -33,7 +33,7 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
   const material = useMemo(() => route?.params?.material || {}, [route?.params?.material]);
 
   const [isBookmarked, setIsBookmarked] = useState<boolean>(!!material.is_bookmarked);
-  const [busy, setBusy] = useState<{ bookmark?: boolean; download?: boolean; review?: boolean }>({});
+  const [busy, setBusy] = useState<{ bookmark?: boolean; download?: boolean; review?: boolean; follow?: boolean }>({});
   
   // New state for review form
   const [userRating, setUserRating] = useState<number>(0);
@@ -42,6 +42,13 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
   // Add state for reviews
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
+
+  // Add state for follow functionality
+  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [uploaderProfile, setUploaderProfile] = useState<any>(null);
+
+  // Add state to track if should show follow button
+  const [showFollowButton, setShowFollowButton] = useState<boolean>(false);
 
   useEffect(() => {
     setIsBookmarked(!!material.is_bookmarked);
@@ -54,7 +61,14 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     if (material.id && !material.uploader_name) {
       fetchUploaderInfo();
     }
-  }, [material.id]);
+    // Check follow status and fetch uploader profile
+    if (material.uploader_id) {
+      checkFollowStatus();
+      fetchUploaderProfile();
+      // Check if should show follow button
+      shouldShowFollowButton().then(setShowFollowButton);
+    }
+  }, [material.id, material.uploader_id]);
 
   const fetchReviews = async () => {
     if (!material.id) return;
@@ -95,14 +109,64 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     
     try {
       const { data } = await supabaseService.getMaterialById(material.id);
-      if (data && data.uploader_name) {
+      if (data) {
         // Update the material object with uploader info
-        material.uploader_name = data.uploader_name;
+        if (data.uploader_name || data.user?.name) {
+          material.uploader_name = data.uploader_name || data.user?.name;
+        }
+        if (data.uploader_id || data.user_id) {
+          material.uploader_id = data.uploader_id || data.user_id;
+        }
+        // Also check if there's user information in the data
+        if (data.user && data.user.name && !material.uploader_name) {
+          material.uploader_name = data.user.name;
+        }
+        
         // Force a re-render by updating state
         setIsBookmarked(prev => prev);
+        
+        // After fetching uploader info, check follow status and show follow button
+        if (material.uploader_id) {
+          checkFollowStatus();
+          fetchUploaderProfile();
+          shouldShowFollowButton().then(setShowFollowButton);
+        }
       }
     } catch (err) {
       console.warn('Failed to fetch uploader info:', err);
+    }
+  };
+
+  const checkFollowStatus = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) return;
+      
+      const userId = session.user.id;
+      if (userId === material.uploader_id) return; // Don't check if viewing own material
+      
+      // TODO: Implement checkFollowStatus in supabaseService
+      // For now, default to false
+      setIsFollowing(false);
+    } catch (err) {
+      console.warn('Failed to check follow status:', err);
+    }
+  };
+
+  const fetchUploaderProfile = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      // TODO: Implement getUserProfile in supabaseService
+      // For now, use basic info from material
+      setUploaderProfile({
+        id: material.uploader_id,
+        name: material.uploader_name,
+      });
+    } catch (err) {
+      console.warn('Failed to fetch uploader profile:', err);
     }
   };
 
@@ -352,6 +416,83 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     }
     return stars;
   };
+  
+  const onFollowToggle = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      setBusy(prev => ({ ...prev, follow: true }));
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) {
+        Alert.alert('Sign In Required', 'Please sign in to follow users.');
+        return;
+      }
+      
+      const userId = session.user.id;
+      if (userId === material.uploader_id) {
+        Alert.alert('Error', 'You cannot follow yourself.');
+        return;
+      }
+
+      // TODO: Implement follow/unfollow functionality in supabaseService
+      Alert.alert(
+        'Feature Coming Soon',
+        'Follow functionality will be available in a future update.',
+        [{ text: 'OK' }]
+      );
+
+    } catch (err) {
+      ErrorHandler.handle(err, 'Follow toggle error');
+      UIUtils.showAlert('Error', 'Unable to update follow status. Please try again.');
+    } finally {
+      setBusy(prev => ({ ...prev, follow: false }));
+    }
+  };
+
+  const onViewUploaderProfile = () => {
+    // Check if we have uploader_id, if not try user_id from material
+    const uploaderId = material.uploader_id || material.user_id;
+    const uploaderName = material.uploader_name || 'Unknown User';
+    
+    if (!uploaderId) {
+      Alert.alert(
+        'Profile Unavailable', 
+        'Unable to load uploader profile. The uploader information may not be available.',
+        [
+          { text: 'OK' },
+          {
+            text: 'Refresh',
+            onPress: () => {
+              // Try to fetch uploader info again
+              fetchUploaderInfo();
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Navigate directly without try/catch since we added UserProfile to navigation
+    navigation.navigate('UserProfile', { 
+      userId: uploaderId,
+      userName: uploaderName
+    });
+  };
+
+  const shouldShowFollowButton = async () => {
+    // Check for uploader_id or user_id
+    const uploaderId = material.uploader_id || material.user_id;
+    if (!uploaderId) return false;
+    
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) return false;
+      
+      return uploaderId !== session.user.id;
+    } catch {
+      return false;
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -370,9 +511,35 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
           <Text style={styles.title} numberOfLines={2}>{material.title || 'Untitled'}</Text>
           {material.author && <Text style={styles.author}>by {material.author}</Text>}
           {material.uploader_name && (
-            <Text style={styles.uploaderInfo}>
-              📤 Uploaded by {material.uploader_name}
-            </Text>
+            <View style={styles.uploaderContainer}>
+              <TouchableOpacity 
+                onPress={onViewUploaderProfile}
+                style={styles.uploaderNameContainer}
+                disabled={!material.uploader_id && !material.user_id}
+              >
+                <Text style={styles.uploaderInfo}>
+                  📤 Uploaded by <Text style={[styles.uploaderNameLink, (!material.uploader_id && !material.user_id) ? styles.disabledLink : null]}>
+                    {material.uploader_name}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+              
+              {showFollowButton && (
+                <TouchableOpacity
+                  style={[styles.followButton, isFollowing ? styles.followingButton : null]}
+                  onPress={onFollowToggle}
+                  disabled={busy.follow}
+                >
+                  {busy.follow ? (
+                    <ActivityIndicator size="small" color={isFollowing ? THEME_COLORS.text : THEME_COLORS.textInverse} />
+                  ) : (
+                    <Text style={[styles.followButtonText, isFollowing ? styles.followingButtonText : null]}>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
 
@@ -435,7 +602,14 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
 
         <View style={styles.metaRow}>
           <Text style={styles.metaLabel}>Uploaded by</Text>
-          <Text style={styles.metaValue}>{material.uploader_name || 'Unknown'}</Text>
+          <TouchableOpacity 
+            onPress={onViewUploaderProfile}
+            disabled={!material.uploader_id && !material.user_id}
+          >
+            <Text style={[styles.metaValue, styles.uploaderLink, (!material.uploader_id && !material.user_id) ? styles.disabledLink : null]}>
+              {material.uploader_name || 'Unknown'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.metaRow}>
@@ -550,12 +724,17 @@ const styles = StyleSheet.create({
     ...UI_CONSTANTS.typography.body2,
     marginTop: UI_CONSTANTS.spacing.xs,
   },
-  uploaderInfo: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
+  uploaderContainer: {
+    alignItems: 'center',
     marginTop: UI_CONSTANTS.spacing.xs,
-    textAlign: 'center',
-    fontStyle: 'italic',
+  },
+  uploaderNameContainer: {
+    marginBottom: UI_CONSTANTS.spacing.xs,
+  },
+  uploaderNameLink: {
+    color: THEME_COLORS.primary,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
   },
   ratingCard: {
     backgroundColor: THEME_COLORS.surface,
@@ -771,5 +950,34 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.textSecondary,
     fontSize: 16,
     marginHorizontal: 1,
+  },
+  followButton: {
+    backgroundColor: THEME_COLORS.primary,
+    paddingHorizontal: UI_CONSTANTS.spacing.md,
+    paddingVertical: UI_CONSTANTS.spacing.xs,
+    borderRadius: UI_CONSTANTS.borderRadius.sm,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  followingButton: {
+    backgroundColor: THEME_COLORS.surface,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.outline,
+  },
+  followButtonText: {
+    color: THEME_COLORS.textInverse,
+    ...UI_CONSTANTS.typography.caption,
+    fontWeight: '600',
+  },
+  followingButtonText: {
+    color: THEME_COLORS.text,
+  },
+  uploaderLink: {
+    color: THEME_COLORS.primary,
+    textDecorationLine: 'underline',
+  },
+  disabledLink: {
+    color: THEME_COLORS.textSecondary,
+    textDecorationLine: 'none',
   },
 });

@@ -618,6 +618,13 @@ class SupabaseService {
   }
 
   /**
+   * Get materials uploaded by a specific user (alias for getUserMaterials)
+   */
+  async getMaterialsByUploader(uploaderId: string): Promise<ApiResponse<Material[]>> {
+    return this.getUserMaterials(uploaderId);
+  }
+
+  /**
    * Search materials by title, category, or tags
    */
   async searchMaterials(query: string, category?: MaterialCategory, subCategory?: SubCategory ): Promise<ApiResponse<Material[]>> {
