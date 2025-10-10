@@ -29,6 +29,7 @@ import {
   THEME_COLORS, 
   UI_CONSTANTS 
 } from '../utils';
+import { useTheme } from '../contexts/ThemeContext';
 import { RootStackParamList, LoginCredentials, FormErrors } from '../types';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -43,6 +44,7 @@ export const LoginScreen = ({ navigation }: Props) => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { colors } = useTheme();
 
   // Configure Google Sign-In
   useEffect(() => {
@@ -127,10 +129,9 @@ export const LoginScreen = ({ navigation }: Props) => {
       // Sign in with Google first
       const userInfo = await GoogleSignin.signIn();
       console.log('Google Sign-In successful:', userInfo);
-
-      // Get the ID token
-      const tokens = await GoogleSignin.getTokens();
-      console.log('Got tokens:', tokens);
+    // Get the ID token
+    const tokens = await GoogleSignin.getTokens();
+    console.log('Got tokens:', tokens);
       
       if (tokens.idToken) {
         console.log('Attempting Supabase sign-in with token...');
@@ -157,8 +158,6 @@ export const LoginScreen = ({ navigation }: Props) => {
       }
     } catch (error) {
       console.error('Google Sign-In error:', error);
-      
-      // Provide specific error handling
       if (error.code === 'DEVELOPER_ERROR') {
         UIUtils.showAlert(
           'Configuration Error', 
@@ -276,49 +275,46 @@ export const LoginScreen = ({ navigation }: Props) => {
     <View style={styles.actionsContainer}>
       {/* Sign In Button */}
       <TouchableOpacity
-        style={[styles.primaryButton, isLoading && styles.disabledButton]}
+        style={[styles.primaryButton, isLoading && styles.disabledButton, { backgroundColor: colors.primary }]}
         onPress={handleLogin}
         disabled={isLoading}
         activeOpacity={0.8}
       >
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={THEME_COLORS.textInverse} />
-            <Text style={styles.primaryButtonText}>Signing In...</Text>
+            <ActivityIndicator size="small" color={colors.textInverse} />
+            <Text style={[styles.primaryButtonText, { color: colors.textInverse }]}>Signing In...</Text>
           </View>
         ) : (
-          <Text style={styles.primaryButtonText}>🚀 Sign In</Text>
+          <Text style={[styles.primaryButtonText, { color: colors.textInverse }]}>🚀 Sign In</Text>
         )}
       </TouchableOpacity>
 
       {/* Google Sign In Button */}
       <TouchableOpacity
-        style={[styles.googleButton, isLoading && styles.disabledButton]}
+        style={[styles.googleButton, isLoading && styles.disabledButton, { borderColor: colors.outline }]}
         onPress={handleGoogleSignIn}
         disabled={isLoading}
         activeOpacity={0.8}
       >
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={THEME_COLORS.text} />
-            <Text style={styles.googleButtonText}>Signing In...</Text>
+            <ActivityIndicator size="small" color={colors.text} />
+            <Text style={[styles.googleButtonText, { color: colors.text }]}>Signing In...</Text>
           </View>
         ) : (
           <View style={styles.googleButtonContent}>
             <Text style={styles.googleIcon}>🌐</Text>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Text style={[styles.googleButtonText, { color: colors.text }]}>Continue with Google</Text>
           </View>
         )}
       </TouchableOpacity>
 
       {/* Sign Up Link */}
       <View style={styles.signUpContainer}>
-        <Text style={styles.signUpText}>Don't have an account? </Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('SignUp')}
-          disabled={isLoading}
-        >
-          <Text style={styles.signUpLink}>Sign Up</Text>
+        <Text style={[styles.signUpText, { color: colors.textSecondary }]}>Don't have an account? </Text>
+        <TouchableOpacity onPress={() => navigation.navigate('SignUp')} disabled={isLoading}>
+          <Text style={[styles.signUpLink, { color: colors.primary }]}>Sign Up</Text>
         </TouchableOpacity>
       </View>
     </View>

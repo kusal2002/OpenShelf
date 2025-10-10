@@ -10,6 +10,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+// Theme Context
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+
 // Services and utilities
 import { supabaseService, onAuthStateChange } from './src/services/supabase';
 import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
@@ -32,6 +35,8 @@ const Tab = createBottomTabNavigator();
 
 // Auth Stack Navigator
 function AuthStack() {
+  // Use theme colors from ThemeContext so navigator chrome updates with theme
+  const { colors } = useTheme();
   // Cast to any to bypass react-navigation type regression with React 19 RN 0.81 combo
   const SNav: any = Stack.Navigator;
   const SScreen: any = Stack.Screen;
@@ -40,8 +45,8 @@ function AuthStack() {
       initialRouteName="Login"
       screenOptions={{
         headerShown: false,
-        headerStyle: { backgroundColor: THEME_COLORS.primary },
-        headerTintColor: THEME_COLORS.background,
+        headerStyle: { backgroundColor: colors.primary },
+        headerTintColor: colors.background,
         headerTitleStyle: { fontWeight: 'bold' },
       }}
     >
@@ -51,27 +56,48 @@ function AuthStack() {
   );
 }
 
+<<<<<<< Updated upstream
+=======
+// Onboarding Stack shown before login (only while not completed)
+function OnboardingStack() {
+  const { colors } = useTheme();
+  const SNav: any = Stack.Navigator;
+  const SScreen: any = Stack.Screen;
+  return (
+    <SNav initialRouteName="Onboarding1" screenOptions={{ headerShown: false }}>
+      <SScreen name="Onboarding1" component={Onboarding1Screen} />
+      <SScreen name="Onboarding2" component={Onboarding2Screen} />
+      <SScreen name="Onboarding3" component={Onboarding3Screen} />
+      {/** include Login/SignUp so navigation.replace('Login') from onboarding works */}
+      <SScreen name="Login" component={LoginScreen} />
+      <SScreen name="SignUp" component={SignUpScreen} />
+    </SNav>
+  );
+}
+
+>>>>>>> Stashed changes
 // Main App Tabs Navigator  
 function MainTabs() {
+  const { colors } = useTheme();
   const TNav: any = Tab.Navigator;
   const TScreen: any = Tab.Screen;
   return (
     <TNav
       initialRouteName="Home"
       screenOptions={{
-        headerStyle: { backgroundColor: THEME_COLORS.primary },
-        headerTintColor: THEME_COLORS.background,
+        headerStyle: { backgroundColor: colors.primary },
+        headerTintColor: colors.background,
         headerTitleStyle: { fontWeight: 'bold' },
         tabBarStyle: {
-          backgroundColor: THEME_COLORS.background,
-          borderTopColor: THEME_COLORS.border,
+          backgroundColor: colors.background,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
         },
-        tabBarActiveTintColor: THEME_COLORS.primary,
-        tabBarInactiveTintColor: THEME_COLORS.textSecondary,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
@@ -85,23 +111,26 @@ function MainTabs() {
 
 // Loading Screen Component
 function LoadingScreen() {
+  const { colors } = useTheme();
   return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={THEME_COLORS.primary} />
-      <Text style={styles.loadingText}>Loading OpenShelf...</Text>
+    <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <StatusBar barStyle={colors === undefined ? 'dark-content' : (colors.text === '#FFFFFF' ? 'light-content' : 'dark-content')} backgroundColor={colors.background} />
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={[styles.loadingText, { color: colors.text }]}>Loading OpenShelf...</Text>
     </View>
   );
 }
 
 // Error Boundary Component (simple version)
 function ErrorFallback({ error }: { error: Error }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.errorContainer}>
-      <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
-      <Text style={styles.errorMessage}>
+    <View style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+      <Text style={[styles.errorTitle, { color: colors.error }]}>Oops! Something went wrong</Text>
+      <Text style={[styles.errorMessage, { color: colors.text }]}>
         {error.message || 'An unexpected error occurred'}
       </Text>
-      <Text style={styles.errorSubtext}>Please restart the app</Text>
+      <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>Please restart the app</Text>
     </View>
   );
 }
@@ -238,17 +267,16 @@ export default function App() {
   // Show loading screen while initializing
   if (authState.loading) {
     return (
-      <SafeAreaProvider>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={THEME_COLORS.background}
-        />
-        <LoadingScreen />
-      </SafeAreaProvider>
+      <ThemeProvider>
+        <SafeAreaProvider>
+          <LoadingScreen />
+        </SafeAreaProvider>
+      </ThemeProvider>
     );
   }
 
   return (
+<<<<<<< Updated upstream
     <SafeAreaProvider>
       <StatusBar
         barStyle="dark-content"
@@ -272,6 +300,33 @@ export default function App() {
         )}
       </NavigationContainer>
     </SafeAreaProvider>
+=======
+    <ThemeProvider>
+      <SafeAreaProvider>
+        {/* StatusBar is handled inside themed components */}
+        <NavigationContainer>
+          {authState.isAuthenticated ? (
+            (() => {
+              const SNav: any = Stack.Navigator;
+              const SScreen: any = Stack.Screen;
+              return (
+                <SNav screenOptions={{ headerShown: false }}>
+                  <SScreen name="Main" component={MainTabs} />
+                  <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
+                  <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
+                  {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
+                  {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
+                </SNav>
+              );
+            })()
+          ) : (
+            // If user not authenticated show onboarding first when needed
+            onboardingComplete ? <AuthStack /> : <OnboardingStack />
+          )}
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </ThemeProvider>
+>>>>>>> Stashed changes
   );
 }
 

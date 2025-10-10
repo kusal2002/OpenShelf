@@ -10,7 +10,8 @@ OpenShelf is a React Native CLI mobile application that allows university studen
 - 📱 **Offline Support**: Access cached materials without internet connection
 - 👥 **User Profiles**: Manage personal information and track contributions
 - 📊 **Analytics**: Track uploads, downloads, and popular materials
-- 🔒 **Authentication**: Secure login/signup with email verification
+- 🔒 **Authentication**: Secure login/signup with email verification (including Google OAuth)
+- 🌓 **Dark Mode**: Beautiful dark theme with instant switching and persistent preferences
 
 ### Advanced Features (Future Implementation)
 - 📖 **Online/Offline Reading**: Built-in PDF viewer with reading progress tracking

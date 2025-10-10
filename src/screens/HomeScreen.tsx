@@ -40,12 +40,18 @@ import {
   MATERIAL_CATEGORIES,
   FILE_ICONS,
 } from '../utils';
+<<<<<<< Updated upstream
+=======
+import { useTheme } from '../contexts/ThemeContext';
+import { FloatingAction } from "react-native-floating-action";
+>>>>>>> Stashed changes
 
 const { width: screenWidth } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<MainTabParamList, 'Home'>;
 
 export const HomeScreen = ({ navigation }: Props) => {
+  const { colors } = useTheme();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [filteredMaterials, setFiltereredMaterials] = useState<Material[]>([]);
   const [loadingState, setLoadingState] = useState<LoadingState>('loading');
@@ -382,7 +388,7 @@ export const HomeScreen = ({ navigation }: Props) => {
   const renderLoadingMore = () => (
     isLoadingMore && (
       <View style={styles.loadingMore}>
-        <ActivityIndicator color={THEME_COLORS.primary} />
+  <ActivityIndicator color={colors.primary} />
         <Text style={styles.loadingMoreText}>Loading more materials...</Text>
       </View>
     )

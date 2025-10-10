@@ -37,6 +37,7 @@ import {
   THEME_COLORS,
   UI_CONSTANTS,
 } from '../utils';
+import { useTheme } from '../contexts/ThemeContext';
 
 type Props = NativeStackScreenProps<MainTabParamList, 'Profile'>;
 
@@ -53,13 +54,14 @@ interface AppSettings {
 }
 
 export const ProfileScreen = ({ navigation }: Props) => {
+  const { colors, isDark, toggleTheme } = useTheme();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [profileStats, setProfileStats] = useState<ProfileStats>({
     totalMaterials: 0,
     totalDownloads: 0,
   });
   const [appSettings, setAppSettings] = useState<AppSettings>({
-    darkMode: false,
+    darkMode: isDark,
     notifications: true,
     autoDownload: false,
     offlineMode: false,
@@ -77,6 +79,14 @@ export const ProfileScreen = ({ navigation }: Props) => {
   useEffect(() => {
     loadProfileData();
   }, []);
+
+  // Sync dark mode setting with theme context
+  useEffect(() => {
+    setAppSettings(prev => ({
+      ...prev,
+      darkMode: isDark,
+    }));
+  }, [isDark]);
 
   const loadProfileData = async () => {
     try {
@@ -122,8 +132,15 @@ export const ProfileScreen = ({ navigation }: Props) => {
       const newSettings = { ...appSettings, [key]: value };
       setAppSettings(newSettings);
       
-      // In a real app, you would save to AsyncStorage
-      UIUtils.showAlert('Settings Updated', `${key} setting has been updated.`);
+      // Handle dark mode toggle
+      if (key === 'darkMode') {
+        toggleTheme();
+      }
+      
+      // In a real app, you would save other settings to AsyncStorage
+      if (key !== 'darkMode') {
+        UIUtils.showAlert('Settings Updated', `${key} setting has been updated.`);
+      }
     } catch (error) {
       ErrorHandler.handle(error, 'Update settings error');
     }
@@ -161,23 +178,293 @@ export const ProfileScreen = ({ navigation }: Props) => {
     setRefreshing(false);
   };
 
+  // Create dynamic styles based on current theme (MUST be before rendering)
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    profileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: UI_CONSTANTS.spacing.lg,
+      backgroundColor: colors.surface,
+      marginBottom: UI_CONSTANTS.spacing.md,
+      ...UI_CONSTANTS.elevation[2],
+    },
+    avatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...UI_CONSTANTS.elevation[3],
+    },
+    avatarText: {
+      ...UI_CONSTANTS.typography.h3,
+      color: colors.primary,
+      fontWeight: 'bold',
+    },
+    onlineIndicator: {
+      borderColor: colors.surface,
+    },
+    userName: {
+      ...UI_CONSTANTS.typography.h5,
+      color: colors.text,
+      fontWeight: 'bold',
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    userEmail: {
+      ...UI_CONSTANTS.typography.body2,
+      color: colors.textSecondary,
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    joinDate: {
+      ...UI_CONSTANTS.typography.caption,
+      color: colors.textTertiary,
+    },
+    sectionTitle: {
+      ...UI_CONSTANTS.typography.h6,
+      color: colors.text,
+      marginBottom: UI_CONSTANTS.spacing.md,
+      fontWeight: '600',
+    },
+    statsContainer: {
+      backgroundColor: colors.surface,
+      padding: UI_CONSTANTS.spacing.lg,
+      marginBottom: UI_CONSTANTS.spacing.md,
+      ...UI_CONSTANTS.elevation[1],
+    },
+    statCard: {
+      flex: 1,
+      alignItems: 'center',
+      padding: UI_CONSTANTS.spacing.md,
+      backgroundColor: colors.surfaceVariant,
+      borderRadius: UI_CONSTANTS.borderRadius.md,
+      ...UI_CONSTANTS.elevation[1],
+    },
+    statNumber: {
+      ...UI_CONSTANTS.typography.h4,
+      color: colors.primary,
+      fontWeight: 'bold',
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    statLabel: {
+      ...UI_CONSTANTS.typography.caption,
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    settingsContainer: {
+      backgroundColor: colors.surface,
+      padding: UI_CONSTANTS.spacing.lg,
+      marginBottom: UI_CONSTANTS.spacing.md,
+      ...UI_CONSTANTS.elevation[1],
+    },
+    settingItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: UI_CONSTANTS.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.outline,
+    },
+    settingTitle: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.text,
+      fontWeight: '500',
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    settingSubtitle: {
+      ...UI_CONSTANTS.typography.caption,
+      color: colors.textSecondary,
+    },
+    actionsContainer: {
+      backgroundColor: colors.surface,
+      padding: UI_CONSTANTS.spacing.lg,
+      marginBottom: UI_CONSTANTS.spacing.md,
+      ...UI_CONSTANTS.elevation[1],
+    },
+    actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: UI_CONSTANTS.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.outline,
+    },
+    actionTitle: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.text,
+      fontWeight: '500',
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    actionSubtitle: {
+      ...UI_CONSTANTS.typography.caption,
+      color: colors.textSecondary,
+    },
+    actionArrow: {
+      ...UI_CONSTANTS.typography.h4,
+      color: colors.textTertiary,
+    },
+    dangerButton: {
+      backgroundColor: colors.error,
+    },
+    dangerButtonText: {
+      color: colors.white,
+    },
+    footer: {
+      padding: UI_CONSTANTS.spacing.xl,
+      alignItems: 'center',
+    },
+    footerText: {
+      ...UI_CONSTANTS.typography.caption,
+      color: colors.textTertiary,
+      textAlign: 'center',
+      marginBottom: UI_CONSTANTS.spacing.xs,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      padding: UI_CONSTANTS.spacing.xl,
+    },
+    loadingText: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.textSecondary,
+      marginTop: UI_CONSTANTS.spacing.md,
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      padding: UI_CONSTANTS.spacing.xl,
+    },
+    errorTitle: {
+      ...UI_CONSTANTS.typography.h5,
+      color: colors.error,
+      textAlign: 'center',
+      marginBottom: UI_CONSTANTS.spacing.md,
+    },
+    errorMessage: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.text,
+      textAlign: 'center',
+      marginBottom: UI_CONSTANTS.spacing.lg,
+    },
+    retryButton: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: UI_CONSTANTS.spacing.xl,
+      paddingVertical: UI_CONSTANTS.spacing.md,
+      borderRadius: UI_CONSTANTS.borderRadius.md,
+      ...UI_CONSTANTS.elevation[2],
+    },
+    retryButtonText: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.white,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      width: '85%',
+      backgroundColor: colors.surface,
+      borderRadius: UI_CONSTANTS.borderRadius.lg,
+      padding: UI_CONSTANTS.spacing.xl,
+      ...UI_CONSTANTS.elevation[4],
+    },
+    modalTitle: {
+      ...UI_CONSTANTS.typography.h5,
+      color: colors.text,
+      fontWeight: 'bold',
+      marginBottom: UI_CONSTANTS.spacing.md,
+      textAlign: 'center',
+    },
+    modalMessage: {
+      ...UI_CONSTANTS.typography.body1,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: UI_CONSTANTS.spacing.xl,
+    },
+    modalButton: {
+      paddingVertical: UI_CONSTANTS.spacing.md,
+      paddingHorizontal: UI_CONSTANTS.spacing.xl,
+      borderRadius: UI_CONSTANTS.borderRadius.md,
+      alignItems: 'center',
+      marginBottom: UI_CONSTANTS.spacing.sm,
+    },
+    confirmButton: {
+      backgroundColor: colors.error,
+    },
+    cancelButton: {
+      backgroundColor: colors.outline,
+    },
+    modalButtonText: {
+      ...UI_CONSTANTS.typography.body1,
+      fontWeight: '600',
+    },
+    confirmButtonText: {
+      color: colors.white,
+    },
+    cancelButtonText: {
+      color: colors.text,
+    },
+  });
+
+  // Early returns for loading and error states
+  if (loadingState === 'loading') {
+    return (
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={dynamicStyles.loadingText}>Loading your profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadingState === 'error') {
+    return (
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.errorContainer}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={dynamicStyles.errorTitle}>Unable to load profile</Text>
+          <Text style={dynamicStyles.errorMessage}>
+            {isOnline 
+              ? 'There was a problem loading your profile. Please try again.'
+              : 'You appear to be offline. Please check your internet connection.'
+            }
+          </Text>
+          <TouchableOpacity style={dynamicStyles.retryButton} onPress={() => loadProfileData()}>
+            <Text style={dynamicStyles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const renderProfileHeader = () => (
-    <View style={styles.profileHeader}>
+    <View style={dynamicStyles.profileHeader}>
       <View style={styles.avatarContainer}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
+        <View style={dynamicStyles.avatar}>
+          <Text style={dynamicStyles.avatarText}>
             {currentUser?.email?.charAt(0).toUpperCase() || '👤'}
           </Text>
         </View>
-        <View style={[styles.onlineIndicator, { backgroundColor: isOnline ? THEME_COLORS.success : THEME_COLORS.warning }]} />
+        <View style={[styles.onlineIndicator, dynamicStyles.onlineIndicator, { backgroundColor: isOnline ? colors.success : colors.warning }]} />
       </View>
 
       <View style={styles.profileInfo}>
-        <Text style={styles.userName}>
+        <Text style={dynamicStyles.userName}>
           {currentUser?.name || currentUser?.email || 'User'}
         </Text>
-        <Text style={styles.userEmail}>{currentUser?.email}</Text>
-        <Text style={styles.joinDate}>
+        <Text style={dynamicStyles.userEmail}>{currentUser?.email}</Text>
+        <Text style={dynamicStyles.joinDate}>
           Member since {DateUtils.formatDate(currentUser?.created_at || new Date().toISOString())}
         </Text>
       </View>
@@ -185,149 +472,149 @@ export const ProfileScreen = ({ navigation }: Props) => {
   );
 
   const renderProfileStats = () => (
-    <View style={styles.statsContainer}>
-      <Text style={styles.sectionTitle}>📊 Your Statistics</Text>
+    <View style={dynamicStyles.statsContainer}>
+      <Text style={dynamicStyles.sectionTitle}>📊 Your Statistics</Text>
       
       <View style={styles.statsGrid}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{profileStats.totalMaterials}</Text>
-          <Text style={styles.statLabel}>Materials Shared</Text>
+        <View style={dynamicStyles.statCard}>
+          <Text style={dynamicStyles.statNumber}>{profileStats.totalMaterials}</Text>
+          <Text style={dynamicStyles.statLabel}>Materials Shared</Text>
         </View>
         
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{profileStats.totalDownloads}</Text>
-          <Text style={styles.statLabel}>Total Downloads</Text>
+        <View style={dynamicStyles.statCard}>
+          <Text style={dynamicStyles.statNumber}>{profileStats.totalDownloads}</Text>
+          <Text style={dynamicStyles.statLabel}>Total Downloads</Text>
         </View>
         
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{isOnline ? '🌐' : '📱'}</Text>
-          <Text style={styles.statLabel}>{isOnline ? 'Online' : 'Offline'}</Text>
+        <View style={dynamicStyles.statCard}>
+          <Text style={dynamicStyles.statNumber}>{isOnline ? '🌐' : '📱'}</Text>
+          <Text style={dynamicStyles.statLabel}>{isOnline ? 'Online' : 'Offline'}</Text>
         </View>
         
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
+        <View style={dynamicStyles.statCard}>
+          <Text style={dynamicStyles.statNumber}>
             {profileStats.totalMaterials > 0 
               ? Math.round(profileStats.totalDownloads / profileStats.totalMaterials) 
               : 0
             }
           </Text>
-          <Text style={styles.statLabel}>Avg Downloads</Text>
+          <Text style={dynamicStyles.statLabel}>Avg Downloads</Text>
         </View>
       </View>
     </View>
   );
 
   const renderAppSettings = () => (
-    <View style={styles.settingsContainer}>
-      <Text style={styles.sectionTitle}>⚙️ App Settings</Text>
+    <View style={dynamicStyles.settingsContainer}>
+      <Text style={dynamicStyles.sectionTitle}>⚙️ App Settings</Text>
       
-      <View style={styles.settingItem}>
+      <View style={dynamicStyles.settingItem}>
         <View style={styles.settingInfo}>
-          <Text style={styles.settingTitle}>🌙 Dark Mode</Text>
-          <Text style={styles.settingSubtitle}>Use dark theme throughout the app</Text>
+          <Text style={dynamicStyles.settingTitle}>🌙 Dark Mode</Text>
+          <Text style={dynamicStyles.settingSubtitle}>Use dark theme throughout the app</Text>
         </View>
         <Switch
           value={appSettings.darkMode}
           onValueChange={(value) => updateAppSetting('darkMode', value)}
-          trackColor={{ false: THEME_COLORS.outline, true: THEME_COLORS.primaryLight }}
-          thumbColor={appSettings.darkMode ? THEME_COLORS.primary : THEME_COLORS.surface}
+          trackColor={{ false: colors.outline, true: colors.primaryLight }}
+          thumbColor={appSettings.darkMode ? colors.primary : colors.surface}
         />
       </View>
 
-      <View style={styles.settingItem}>
+      <View style={dynamicStyles.settingItem}>
         <View style={styles.settingInfo}>
-          <Text style={styles.settingTitle}>🔔 Push Notifications</Text>
-          <Text style={styles.settingSubtitle}>Get notified about new materials and updates</Text>
+          <Text style={dynamicStyles.settingTitle}>🔔 Push Notifications</Text>
+          <Text style={dynamicStyles.settingSubtitle}>Get notified about new materials and updates</Text>
         </View>
         <Switch
           value={appSettings.notifications}
           onValueChange={(value) => updateAppSetting('notifications', value)}
-          trackColor={{ false: THEME_COLORS.outline, true: THEME_COLORS.primaryLight }}
-          thumbColor={appSettings.notifications ? THEME_COLORS.primary : THEME_COLORS.surface}
+          trackColor={{ false: colors.outline, true: colors.primaryLight }}
+          thumbColor={appSettings.notifications ? colors.primary : colors.surface}
         />
       </View>
 
-      <View style={styles.settingItem}>
+      <View style={dynamicStyles.settingItem}>
         <View style={styles.settingInfo}>
-          <Text style={styles.settingTitle}>📥 Auto Download</Text>
-          <Text style={styles.settingSubtitle}>Automatically download materials for offline use</Text>
+          <Text style={dynamicStyles.settingTitle}>📥 Auto Download</Text>
+          <Text style={dynamicStyles.settingSubtitle}>Automatically download materials for offline use</Text>
         </View>
         <Switch
           value={appSettings.autoDownload}
           onValueChange={(value) => updateAppSetting('autoDownload', value)}
-          trackColor={{ false: THEME_COLORS.outline, true: THEME_COLORS.primaryLight }}
-          thumbColor={appSettings.autoDownload ? THEME_COLORS.primary : THEME_COLORS.surface}
+          trackColor={{ false: colors.outline, true: colors.primaryLight }}
+          thumbColor={appSettings.autoDownload ? colors.primary : colors.surface}
         />
       </View>
 
-      <View style={styles.settingItem}>
+      <View style={dynamicStyles.settingItem}>
         <View style={styles.settingInfo}>
-          <Text style={styles.settingTitle}>📱 Offline Mode</Text>
-          <Text style={styles.settingSubtitle}>Prioritize offline functionality</Text>
+          <Text style={dynamicStyles.settingTitle}>📱 Offline Mode</Text>
+          <Text style={dynamicStyles.settingSubtitle}>Prioritize offline functionality</Text>
         </View>
         <Switch
           value={appSettings.offlineMode}
           onValueChange={(value) => updateAppSetting('offlineMode', value)}
-          trackColor={{ false: THEME_COLORS.outline, true: THEME_COLORS.primaryLight }}
-          thumbColor={appSettings.offlineMode ? THEME_COLORS.primary : THEME_COLORS.surface}
+          trackColor={{ false: colors.outline, true: colors.primaryLight }}
+          thumbColor={appSettings.offlineMode ? colors.primary : colors.surface}
         />
       </View>
     </View>
   );
 
   const renderActions = () => (
-    <View style={styles.actionsContainer}>
-      <Text style={styles.sectionTitle}>🛠️ Account Actions</Text>
+    <View style={dynamicStyles.actionsContainer}>
+      <Text style={dynamicStyles.sectionTitle}>🛠️ Account Actions</Text>
       
-      <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('Library')}>
+      <TouchableOpacity style={dynamicStyles.actionButton} onPress={() => navigation.navigate('Library')}>
         <Text style={styles.actionIcon}>📚</Text>
         <View style={styles.actionInfo}>
-          <Text style={styles.actionTitle}>My Library</Text>
-          <Text style={styles.actionSubtitle}>View and manage your materials</Text>
+          <Text style={dynamicStyles.actionTitle}>My Library</Text>
+          <Text style={dynamicStyles.actionSubtitle}>View and manage your materials</Text>
         </View>
-        <Text style={styles.actionArrow}>›</Text>
+        <Text style={dynamicStyles.actionArrow}>›</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('Upload')}>
+      <TouchableOpacity style={dynamicStyles.actionButton} onPress={() => navigation.navigate('Upload')}>
         <Text style={styles.actionIcon}>📤</Text>
         <View style={styles.actionInfo}>
-          <Text style={styles.actionTitle}>Upload Material</Text>
-          <Text style={styles.actionSubtitle}>Share study materials with others</Text>
+          <Text style={dynamicStyles.actionTitle}>Upload Material</Text>
+          <Text style={dynamicStyles.actionSubtitle}>Share study materials with others</Text>
         </View>
-        <Text style={styles.actionArrow}>›</Text>
+        <Text style={dynamicStyles.actionArrow}>›</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionButton} onPress={clearCache}>
+      <TouchableOpacity style={dynamicStyles.actionButton} onPress={clearCache}>
         <Text style={styles.actionIcon}>🗑️</Text>
         <View style={styles.actionInfo}>
-          <Text style={styles.actionTitle}>Clear Cache</Text>
-          <Text style={styles.actionSubtitle}>Free up storage space</Text>
+          <Text style={dynamicStyles.actionTitle}>Clear Cache</Text>
+          <Text style={dynamicStyles.actionSubtitle}>Free up storage space</Text>
         </View>
-        <Text style={styles.actionArrow}>›</Text>
+        <Text style={dynamicStyles.actionArrow}>›</Text>
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={styles.actionButton}
+        style={dynamicStyles.actionButton}
         onPress={() => UIUtils.showAlert('Help & Support', 'Contact support at help@openshelf.edu or visit our FAQ section in the app.')}
       >
         <Text style={styles.actionIcon}>❓</Text>
         <View style={styles.actionInfo}>
-          <Text style={styles.actionTitle}>Help & Support</Text>
-          <Text style={styles.actionSubtitle}>Get help or contact support</Text>
+          <Text style={dynamicStyles.actionTitle}>Help & Support</Text>
+          <Text style={dynamicStyles.actionSubtitle}>Get help or contact support</Text>
         </View>
-        <Text style={styles.actionArrow}>›</Text>
+        <Text style={dynamicStyles.actionArrow}>›</Text>
       </TouchableOpacity>
 
       <TouchableOpacity 
-        style={[styles.actionButton, styles.logoutButton]}
+        style={[dynamicStyles.actionButton, styles.logoutButton]}
         onPress={() => setShowLogoutModal(true)}
       >
         <Text style={styles.actionIcon}>🚪</Text>
         <View style={styles.actionInfo}>
-          <Text style={[styles.actionTitle, styles.logoutTitle]}>Sign Out</Text>
-          <Text style={styles.actionSubtitle}>Sign out of your account</Text>
+          <Text style={[dynamicStyles.actionTitle, styles.logoutTitle]}>Sign Out</Text>
+          <Text style={dynamicStyles.actionSubtitle}>Sign out of your account</Text>
         </View>
-        <Text style={styles.actionArrow}>›</Text>
+        <Text style={dynamicStyles.actionArrow}>›</Text>
       </TouchableOpacity>
     </View>
   );
@@ -339,30 +626,30 @@ export const ProfileScreen = ({ navigation }: Props) => {
       animationType="fade"
       onRequestClose={() => setShowLogoutModal(false)}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.logoutModal}>
+      <View style={dynamicStyles.modalOverlay}>
+        <View style={dynamicStyles.modalContent}>
           <Text style={styles.logoutModalIcon}>👋</Text>
-          <Text style={styles.logoutModalTitle}>Sign Out</Text>
-          <Text style={styles.logoutModalSubtitle}>
+          <Text style={dynamicStyles.modalTitle}>Sign Out</Text>
+          <Text style={dynamicStyles.modalMessage}>
             Are you sure you want to sign out? You'll need to sign in again to access your materials.
           </Text>
           
           <View style={styles.logoutModalActions}>
             <TouchableOpacity
-              style={styles.logoutModalCancel}
+              style={[dynamicStyles.modalButton, dynamicStyles.cancelButton]}
               onPress={() => setShowLogoutModal(false)}
             >
-              <Text style={styles.logoutModalCancelText}>Cancel</Text>
+              <Text style={[dynamicStyles.modalButtonText, dynamicStyles.cancelButtonText]}>Cancel</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.logoutModalConfirm}
+              style={[dynamicStyles.modalButton, dynamicStyles.confirmButton]}
               onPress={() => {
                 setShowLogoutModal(false);
                 handleLogout();
               }}
             >
-              <Text style={styles.logoutModalConfirmText}>Sign Out</Text>
+              <Text style={[dynamicStyles.modalButtonText, dynamicStyles.confirmButtonText]}>Sign Out</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -372,10 +659,10 @@ export const ProfileScreen = ({ navigation }: Props) => {
 
   if (loadingState === 'loading') {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={THEME_COLORS.primary} />
-          <Text style={styles.loadingText}>Loading your profile...</Text>
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={dynamicStyles.loadingText}>Loading your profile...</Text>
         </View>
       </SafeAreaView>
     );
@@ -383,18 +670,18 @@ export const ProfileScreen = ({ navigation }: Props) => {
 
   if (loadingState === 'error') {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.errorContainer}>
           <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Unable to load profile</Text>
-          <Text style={styles.errorSubtitle}>
+          <Text style={dynamicStyles.errorTitle}>Unable to load profile</Text>
+          <Text style={dynamicStyles.errorMessage}>
             {isOnline 
               ? 'There was a problem loading your profile. Please try again.'
               : 'You appear to be offline. Please check your internet connection.'
             }
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => loadProfileData()}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
+          <TouchableOpacity style={dynamicStyles.retryButton} onPress={() => loadProfileData()}>
+            <Text style={dynamicStyles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -402,7 +689,7 @@ export const ProfileScreen = ({ navigation }: Props) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={dynamicStyles.container}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -410,8 +697,8 @@ export const ProfileScreen = ({ navigation }: Props) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[THEME_COLORS.primary]}
-            tintColor={THEME_COLORS.primary}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -421,11 +708,11 @@ export const ProfileScreen = ({ navigation }: Props) => {
         {renderAppSettings()}
         {renderActions()}
         
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
+        <View style={dynamicStyles.footer}>
+          <Text style={dynamicStyles.footerText}>
             OpenShelf University Library v1.0.0
           </Text>
-          <Text style={styles.footerText}>
+          <Text style={dynamicStyles.footerText}>
             Made with ❤️ for students
           </Text>
         </View>
