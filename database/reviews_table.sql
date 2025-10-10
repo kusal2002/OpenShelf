@@ -1,3 +1,5 @@
+-- Create reviews table with proper policies
+
 -- Create reviews table
 CREATE TABLE IF NOT EXISTS reviews (
   id BIGSERIAL PRIMARY KEY,
@@ -16,12 +18,17 @@ CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id);
 -- Enable RLS
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist, then recreate them
+DROP POLICY IF EXISTS "Users can view all reviews" ON reviews;
+DROP POLICY IF EXISTS "Users can insert their own reviews" ON reviews;
+DROP POLICY IF EXISTS "Users can update their own reviews" ON reviews;
+
 -- Create policies
 CREATE POLICY "Users can view all reviews" ON reviews FOR SELECT USING (true);
 CREATE POLICY "Users can insert their own reviews" ON reviews FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own reviews" ON reviews FOR UPDATE USING (auth.uid() = user_id);
 
--- Update materials table
+-- Update materials table to add rating columns if they don't exist
 ALTER TABLE materials 
   ADD COLUMN IF NOT EXISTS average_rating DECIMAL(3,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS reviews_count INTEGER DEFAULT 0;

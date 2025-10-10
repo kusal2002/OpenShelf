@@ -50,6 +50,10 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
   // Add useEffect to fetch reviews when screen loads
   useEffect(() => {
     fetchReviews();
+    // Fetch uploader info if not already present
+    if (material.id && !material.uploader_name) {
+      fetchUploaderInfo();
+    }
   }, [material.id]);
 
   const fetchReviews = async () => {
@@ -86,6 +90,22 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     }
   };
   
+  const fetchUploaderInfo = async () => {
+    if (!material.id) return;
+    
+    try {
+      const { data } = await supabaseService.getMaterialById(material.id);
+      if (data && data.uploader_name) {
+        // Update the material object with uploader info
+        material.uploader_name = data.uploader_name;
+        // Force a re-render by updating state
+        setIsBookmarked(prev => prev);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch uploader info:', err);
+    }
+  };
+
   const onBookmark = async () => {
     try {
       setBusy(prev => ({ ...prev, bookmark: true }));
@@ -349,6 +369,11 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={2}>{material.title || 'Untitled'}</Text>
           {material.author && <Text style={styles.author}>by {material.author}</Text>}
+          {material.uploader_name && (
+            <Text style={styles.uploaderInfo}>
+              📤 Uploaded by {material.uploader_name}
+            </Text>
+          )}
         </View>
 
         <View style={styles.ratingCard}>
@@ -406,6 +431,11 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         <View style={styles.metaRow}>
           <Text style={styles.metaLabel}>Size</Text>
           <Text style={styles.metaValue}>{material.file_size ? `${(material.file_size / (1024*1024)).toFixed(2)} MB` : '—'}</Text>
+        </View>
+
+        <View style={styles.metaRow}>
+          <Text style={styles.metaLabel}>Uploaded by</Text>
+          <Text style={styles.metaValue}>{material.uploader_name || 'Unknown'}</Text>
         </View>
 
         <View style={styles.metaRow}>
@@ -519,6 +549,13 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.textSecondary,
     ...UI_CONSTANTS.typography.body2,
     marginTop: UI_CONSTANTS.spacing.xs,
+  },
+  uploaderInfo: {
+    ...UI_CONSTANTS.typography.body2,
+    color: THEME_COLORS.textSecondary,
+    marginTop: UI_CONSTANTS.spacing.xs,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   ratingCard: {
     backgroundColor: THEME_COLORS.surface,

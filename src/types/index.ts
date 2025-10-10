@@ -32,27 +32,29 @@ export interface AuthUser {
 // Study Material Types
 export interface Material {
   id: string;
-  title: string;
-  file_url: string;
-  file_name: string;
-  file_size: number;
-  file_type: string; // 'pdf' | 'doc' | 'docx'
   user_id: string;
-  category: MaterialCategory;
-  sub_category: SubCategory;
+  title: string;
   description?: string;
+  author?: string;
+  category: MaterialCategory;
+  sub_category?: string;
+  file_type: string;
+  file_size: number;
+  file_url: string;
+  storage_path?: string;
+  file_name?: string;
+  cover_url?: string;
   tags?: string[];
   is_public: boolean;
-  download_count: number;
+  download_count?: number;
+  average_rating?: number;
+  reviews_count?: number;
   created_at: string;
   updated_at: string;
-  // Offline support
-  is_downloaded?: boolean;
-  local_path?: string;
-  // Bookmark support
-  is_bookmarked?: boolean;
-  // Uploader information
-  uploader_name?: string;
+  
+  // Computed fields from joins
+  uploader_name?: string;  // Name of the user who uploaded this material
+  is_bookmarked?: boolean; // Whether current user has bookmarked this
 }
 
 export type MaterialCategory = 

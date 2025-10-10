@@ -624,15 +624,20 @@ class SupabaseService {
     try {
       let queryBuilder = supabase
         .from('materials')
-        .select('*')
+        .select(`
+          *,
+          users:user_id (
+            name
+          )
+        `)
         .eq('is_public', true);
 
       if (category) {
         queryBuilder = queryBuilder.eq('category', category);
       }
-       if (subCategory) {
-      queryBuilder = queryBuilder.eq('sub_category', subCategory);   // ← filter by subcategory
-    }
+      if (subCategory) {
+        queryBuilder = queryBuilder.eq('sub_category', subCategory);
+      }
 
       const { data, error } = await queryBuilder
         .or(`title.ilike.%${query}%,description.ilike.%${query}%,tags.cs.{${query}}`)
@@ -643,7 +648,14 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
-      return { data: data || [], error: null, success: true };
+      // Transform the response to include uploader_name
+      const materials = data?.map(item => ({
+        ...item,
+        uploader_name: item.users?.name || 'Unknown',
+        users: undefined // Remove the nested users object
+      })) || [];
+
+      return { data: materials, error: null, success: true };
     } catch (error) {
       return {
         data: null,
@@ -1139,6 +1151,43 @@ class SupabaseService {
     } catch (error: any) {
       console.error('Error in getReviewsForMaterial:', error);
       return { data: null, error: error.message || 'Failed to fetch reviews' };
+    }
+  }
+
+  /**
+   * Get a single material by ID with uploader information
+   */
+  async getMaterialById(materialId: string): Promise<ApiResponse<Material>> {
+    try {
+      const { data, error } = await supabase
+        .from('materials')
+        .select(`
+          *,
+          users:user_id (
+            name
+          )
+        `)
+        .eq('id', materialId)
+        .single();
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      // Transform to include uploader_name
+      const material = {
+        ...data,
+        uploader_name: data.users?.name || 'Unknown',
+        users: undefined // Remove nested users object
+      };
+
+      return { data: material, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Material fetch failed',
+        success: false,
+      };
     }
   }
 }
