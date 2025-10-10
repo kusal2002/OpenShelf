@@ -9,6 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
+  Share,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME_COLORS, UI_CONSTANTS, UIComponents, DateUtils, FileUtils, UIUtils, ErrorHandler, downloadFile } from '../utils';
@@ -511,17 +513,112 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     }
   };
 
+  const onShare = async () => {
+    try {
+      const shareContent = {
+        title: `Check out "${material.title}" on OpenShelf`,
+        message: `I found this study material that might interest you!\n\n` +
+                 `📚 Title: ${material.title}\n` +
+                 `👤 Uploaded by: ${material.uploader_name || 'Unknown'}\n` +
+                 `📂 Category: ${material.category || 'General'}\n` +
+                 `⭐ Rating: ${(material.average_rating || 0).toFixed(1)}/5 (${material.reviews_count || 0} reviews)\n` +
+                 `📥 Downloads: ${material.download_count || 0}\n\n` +
+                 `${material.description ? `Description: ${material.description.substring(0, 150)}${material.description.length > 150 ? '...' : ''}\n\n` : ''}` +
+                 `Shared via OpenShelf University Library App`,
+        url: Platform.OS === 'ios' ? undefined : `https://openshelf.app/materials/${material.id}`, // Optional deep link
+      };
+
+      const result = await Share.share(shareContent, {
+        dialogTitle: 'Share Study Material',
+        subject: shareContent.title, // For email sharing
+      });
+
+      if (result.action === Share.sharedAction) {
+        // Track share analytics (optional)
+        console.log('Material shared successfully');
+        
+        // Show success feedback
+        UIUtils.showAlert('Shared!', 'Material details shared successfully.');
+        
+        // Optional: Track sharing in analytics
+        try {
+          // You could implement analytics tracking here
+          // await analytics.track('material_shared', { materialId: material.id });
+        } catch (err) {
+          console.warn('Failed to track share event:', err);
+        }
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dismissed');
+      }
+    } catch (error) {
+      console.error('Error sharing material:', error);
+      
+      // Fallback: Copy to clipboard if sharing fails
+      Alert.alert(
+        'Share Failed',
+        'Unable to share using the system share dialog. Would you like to copy the details to clipboard instead?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Copy to Clipboard',
+            onPress: async () => {
+              try {
+                const clipboardContent = `Check out "${material.title}" on OpenShelf\n\n` +
+                                       `Title: ${material.title}\n` +
+                                       `Uploaded by: ${material.uploader_name || 'Unknown'}\n` +
+                                       `Category: ${material.category || 'General'}\n` +
+                                       `Rating: ${(material.average_rating || 0).toFixed(1)}/5\n` +
+                                       `Downloads: ${material.download_count || 0}\n\n` +
+                                       `${material.description || 'No description available.'}\n\n` +
+                                       `Shared via OpenShelf University Library App`;
+                
+                // You'll need to install @react-native-clipboard/clipboard for this
+                // For now, just show the content
+                Alert.alert('Copy Content', clipboardContent, [
+                  { text: 'OK' }
+                ]);
+              } catch (clipboardError) {
+                ErrorHandler.handle(clipboardError, 'Clipboard error');
+                UIUtils.showAlert('Error', 'Failed to copy to clipboard.');
+              }
+            }
+          }
+        ]
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
-      {/* In-screen overlay back button (keeps top bar hidden globally) */}
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        onPress={() => navigation.goBack()}
-        style={styles.overlayBackButton}
-      >
-        <Text style={styles.overlayBackIcon}>←</Text>
-      </TouchableOpacity>
+      {/* Navigation Header */}
+      <View style={styles.navigationHeader}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Material Details
+          </Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {material.title || 'Study Material'}
+          </Text>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={onShare}
+          >
+            <Text style={styles.headerButtonIcon}>↗</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.coverContainer}>
@@ -711,6 +808,62 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: THEME_COLORS.background },
+  navigationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: UI_CONSTANTS.spacing.md,
+    paddingVertical: UI_CONSTANTS.spacing.sm,
+    backgroundColor: THEME_COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME_COLORS.outline,
+    ...UI_CONSTANTS.elevation[1],
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME_COLORS.surfaceVariant,
+  },
+  backIcon: {
+    color: THEME_COLORS.text,
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: UI_CONSTANTS.spacing.md,
+  },
+  headerTitle: {
+    ...UI_CONSTANTS.typography.h6,
+    color: THEME_COLORS.text,
+    fontWeight: '600',
+  },
+  headerSubtitle: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.textSecondary,
+    marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME_COLORS.surfaceVariant,
+  },
+  headerButtonIcon: {
+    color: THEME_COLORS.text,
+    fontSize: 18,
+    fontWeight: '600',
+  },
   container: {
     flexGrow: 1,
     padding: UI_CONSTANTS.spacing.lg,
@@ -1006,23 +1159,5 @@ const styles = StyleSheet.create({
   disabledLink: {
     color: THEME_COLORS.textSecondary,
     textDecorationLine: 'none',
-  },
-  overlayBackButton: {
-    position: 'absolute',
-    top: UI_CONSTANTS.spacing.sm + 4,
-    left: UI_CONSTANTS.spacing.sm + 4,
-    zIndex: 50,
-    backgroundColor: THEME_COLORS.surface,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...UI_CONSTANTS.elevation[2],
-  },
-  overlayBackIcon: {
-    color: THEME_COLORS.text,
-    fontSize: 20,
-    fontWeight: '600',
   },
 });

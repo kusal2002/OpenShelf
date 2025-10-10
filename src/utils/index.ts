@@ -804,6 +804,51 @@ export class ErrorHandler {
 export { downloadFile } from './download';
 export type { DownloadResult } from './download';
 
+export const ShareUtils = {
+  /**
+   * Share material details with rich formatting
+   */
+  async shareMaterial(material: any) {
+    const shareContent = {
+      title: `Check out "${material.title}" on OpenShelf`,
+      message: `I found this study material that might interest you!\n\n` +
+               `📚 ${material.title}\n` +
+               `👤 By: ${material.uploader_name || 'Unknown'}\n` +
+               `📂 ${material.category || 'General'}\n` +
+               `⭐ ${(material.average_rating || 0).toFixed(1)}/5\n` +
+               `📥 ${material.download_count || 0} downloads\n\n` +
+               `${material.description ? material.description.substring(0, 100) + '...\n\n' : ''}` +
+               `Get it on OpenShelf University Library App`,
+    };
+
+    return shareContent;
+  },
+
+  /**
+   * Generate shareable URL for material (for future deep linking)
+   */
+  getMaterialShareUrl(materialId: string): string {
+    return `https://openshelf.app/materials/${materialId}`;
+  },
+
+  /**
+   * Format material info for different share contexts
+   */
+  formatMaterialForShare(material: any, format: 'short' | 'detailed' = 'detailed'): string {
+    if (format === 'short') {
+      return `📚 "${material.title}" by ${material.uploader_name || 'Unknown'} - ${(material.average_rating || 0).toFixed(1)}/5 stars on OpenShelf`;
+    }
+
+    return `📚 ${material.title}\n` +
+           `👤 Uploaded by: ${material.uploader_name || 'Unknown'}\n` +
+           `📂 Category: ${material.category || 'General'}\n` +
+           `⭐ Rating: ${(material.average_rating || 0).toFixed(1)}/5 (${material.reviews_count || 0} reviews)\n` +
+           `📥 Downloads: ${material.download_count || 0}\n\n` +
+           `${material.description ? `${material.description.substring(0, 200)}${material.description.length > 200 ? '...' : ''}\n\n` : ''}` +
+           `Discover more study materials on OpenShelf University Library App`;
+  }
+};
+
 export default {
   CacheManager,
   NetworkUtils,
