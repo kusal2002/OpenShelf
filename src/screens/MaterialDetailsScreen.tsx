@@ -513,6 +513,16 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* In-screen overlay back button (keeps top bar hidden globally) */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => navigation.goBack()}
+        style={styles.overlayBackButton}
+      >
+        <Text style={styles.overlayBackIcon}>←</Text>
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.coverContainer}>
           {material.cover_url ? (
@@ -996,5 +1006,23 @@ const styles = StyleSheet.create({
   disabledLink: {
     color: THEME_COLORS.textSecondary,
     textDecorationLine: 'none',
+  },
+  overlayBackButton: {
+    position: 'absolute',
+    top: UI_CONSTANTS.spacing.sm + 4,
+    left: UI_CONSTANTS.spacing.sm + 4,
+    zIndex: 50,
+    backgroundColor: THEME_COLORS.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...UI_CONSTANTS.elevation[2],
+  },
+  overlayBackIcon: {
+    color: THEME_COLORS.text,
+    fontSize: 20,
+    fontWeight: '600',
   },
 });
