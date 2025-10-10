@@ -237,6 +237,16 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* overlay back button so top bar can remain hidden */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => navigation.goBack()}
+        style={styles.overlayBackButton}
+      >
+        <Text style={styles.overlayBackIcon}>←</Text>
+      </TouchableOpacity>
+
       <ScrollView style={styles.container}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
@@ -379,6 +389,24 @@ export default function UserProfileScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: THEME_COLORS.background },
+  overlayBackButton: {
+    position: 'absolute',
+    top: UI_CONSTANTS.spacing.sm + 4,
+    left: UI_CONSTANTS.spacing.sm + 4,
+    zIndex: 50,
+    backgroundColor: THEME_COLORS.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...UI_CONSTANTS.elevation[2],
+  },
+  overlayBackIcon: {
+    color: THEME_COLORS.text,
+    fontSize: 20,
+    fontWeight: '600',
+  },
   container: { flex: 1 },
   loadingContainer: {
     flex: 1,

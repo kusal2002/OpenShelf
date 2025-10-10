@@ -85,6 +85,7 @@ function MainTabs() {
     <TNav
       initialRouteName="Home"
       screenOptions={{
+        headerShown: false,
         headerStyle: { backgroundColor: THEME_COLORS.primary },
         headerTintColor: THEME_COLORS.background,
         headerTitleStyle: { fontWeight: 'bold' },
@@ -298,11 +299,27 @@ export default function App() {
             const SNav: any = Stack.Navigator;
             const SScreen: any = Stack.Screen;
             return (
-              <SNav screenOptions={{ headerShown: false }}>
+              // Keep headers hidden by default so MainTabs has no top bar,
+              // but enable headers for specific screens below.
+              <SNav
+                screenOptions={{
+                  headerShown: false,
+                  headerStyle: { backgroundColor: THEME_COLORS.primary },
+                  headerTintColor: THEME_COLORS.background,
+                  headerTitleStyle: { fontWeight: '600' },
+                }}
+              >
                 <SScreen name="Main" component={MainTabs} />
-                <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
-                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
-                <SScreen name="UserProfile" component={UserProfileScreen} options={{ headerShown: true, title: 'Profile' }} />
+                {/* Material details: keep header hidden (we use an in-screen back button) */}
+                <SScreen
+                  name="MaterialDetails"
+                  component={MaterialDetailsScreen}
+                  options={{ headerShown: false, title: 'Material' }}
+                />
+                {/* Preview remains full-screen without header */}
+                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: false, title: 'Preview' }} />
+                {/* User profile: keep header hidden (we use an in-screen back button) */}
+                <SScreen name="UserProfile" component={UserProfileScreen} options={{ headerShown: false, title: 'Profile' }} />
                 {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
                 {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
               </SNav>
