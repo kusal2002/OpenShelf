@@ -587,13 +587,16 @@ class SupabaseService {
 
       console.log('Raw materials data sample:', data && data.length > 0 ? JSON.stringify(data[0]) : 'No data');
       
-      // Transform the response to include uploader_name in the Material object
+      // Transform the response to include uploader_name and ensure rating fields exist
       const materials = data?.map(item => {
         console.log(`Processing item ${item.id}, users:`, item.users);
         return {
           ...item,
           uploader_name: item.users?.name || 'Unknown',
-          users: undefined // Remove the nested users object
+          users: undefined, // Remove the nested users object
+          // Ensure rating fields are always present with default values
+          average_rating: item.average_rating || 0,
+          reviews_count: item.reviews_count || 0
         };
       }) || [];
 
@@ -627,11 +630,14 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
-      // Transform the response to include uploader_name in the Material object
+      // Transform the response to include uploader_name and ensure rating fields exist
       const materials = data?.map(item => ({
         ...item,
         uploader_name: item.users?.name || 'Unknown',
-        users: undefined // Remove the nested users object
+        users: undefined, // Remove the nested users object
+        // Ensure rating fields are always present with default values
+        average_rating: item.average_rating || 0,
+        reviews_count: item.reviews_count || 0
       })) || [];
 
       return { data: materials, error: null, success: true };
