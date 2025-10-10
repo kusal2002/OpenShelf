@@ -60,20 +60,28 @@ export default function UserProfileScreen({ route, navigation }: any) {
   const fetchUserProfile = async () => {
     try {
       setLoading(true);
-      // TODO: Implement getUserProfile in supabaseService
-      // For now, create a basic profile from the passed parameters
-      const basicProfile: UserProfile = {
-        id: userId,
-        name: userName || 'User',
-        email: 'Not available',
-        university_id: undefined,
-        avatar_url: undefined,
-        created_at: new Date().toISOString(),
-        followers_count: 0,
-        following_count: 0,
-      };
+      const { data, error } = await supabaseService.getUserProfile(userId);
       
-      setProfile(basicProfile);
+      if (error) {
+        console.warn('Error fetching user profile:', error);
+        // Create a basic profile from the passed parameters as fallback
+        const basicProfile: UserProfile = {
+          id: userId,
+          name: userName || 'User',
+          email: 'Not available',
+          university_id: undefined,
+          avatar_url: undefined,
+          created_at: new Date().toISOString(),
+          followers_count: 0,
+          following_count: 0,
+        };
+        setProfile(basicProfile);
+        return;
+      }
+      
+      if (data) {
+        setProfile(data);
+      }
     } catch (err) {
       ErrorHandler.handle(err, 'Error fetching user profile');
       Alert.alert('Error', 'Failed to load user profile.');
@@ -129,9 +137,8 @@ export default function UserProfileScreen({ route, navigation }: any) {
       const currentUserId = session.user.id;
       if (currentUserId === userId) return;
       
-      // TODO: Implement checkFollowStatus in supabaseService
-      // For now, default to false
-      setIsFollowing(false);
+      const { data } = await supabaseService.checkFollowStatus(currentUserId, userId);
+      setIsFollowing(!!data);
     } catch (err) {
       console.warn('Failed to check follow status:', err);
     }
@@ -152,13 +159,31 @@ export default function UserProfileScreen({ route, navigation }: any) {
         return;
       }
 
-      // TODO: Implement follow/unfollow functionality in supabaseService
-      Alert.alert(
-        'Feature Coming Soon',
-        'Follow functionality will be available in a future update. Please implement followUser and unfollowUser methods in your supabaseService.',
-        [{ text: 'OK' }]
-      );
-
+      if (isFollowing) {
+        const res = await supabaseService.unfollowUser(currentUserId, userId);
+        if (res && res.success !== false) {
+          setIsFollowing(false);
+          UIUtils.showAlert('Unfollowed', `You are no longer following ${profile?.name || userName}.`);
+          // Update follower count
+          if (profile) {
+            setProfile(prev => prev ? { ...prev, followers_count: Math.max(0, (prev.followers_count || 0) - 1) } : null);
+          }
+        } else {
+          throw res?.error || new Error('Failed to unfollow user');
+        }
+      } else {
+        const res = await supabaseService.followUser(currentUserId, userId);
+        if (res && res.success) {
+          setIsFollowing(true);
+          UIUtils.showAlert('Following', `You are now following ${profile?.name || userName}!`);
+          // Update follower count
+          if (profile) {
+            setProfile(prev => prev ? { ...prev, followers_count: (prev.followers_count || 0) + 1 } : null);
+          }
+        } else {
+          throw res?.error || new Error('Failed to follow user');
+        }
+      }
     } catch (err) {
       ErrorHandler.handle(err, 'Follow toggle error');
       UIUtils.showAlert('Error', 'Unable to update follow status. Please try again.');

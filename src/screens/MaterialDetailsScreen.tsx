@@ -147,9 +147,8 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
       const userId = session.user.id;
       if (userId === material.uploader_id) return; // Don't check if viewing own material
       
-      // TODO: Implement checkFollowStatus in supabaseService
-      // For now, default to false
-      setIsFollowing(false);
+      const { data } = await supabaseService.checkFollowStatus(userId, material.uploader_id);
+      setIsFollowing(!!data);
     } catch (err) {
       console.warn('Failed to check follow status:', err);
     }
@@ -159,12 +158,10 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     if (!material.uploader_id) return;
     
     try {
-      // TODO: Implement getUserProfile in supabaseService
-      // For now, use basic info from material
-      setUploaderProfile({
-        id: material.uploader_id,
-        name: material.uploader_name,
-      });
+      const { data } = await supabaseService.getUserProfile(material.uploader_id);
+      if (data) {
+        setUploaderProfile(data);
+      }
     } catch (err) {
       console.warn('Failed to fetch uploader profile:', err);
     }
@@ -434,13 +431,33 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         return;
       }
 
-      // TODO: Implement follow/unfollow functionality in supabaseService
-      Alert.alert(
-        'Feature Coming Soon',
-        'Follow functionality will be available in a future update.',
-        [{ text: 'OK' }]
-      );
-
+      if (isFollowing) {
+        const res = await supabaseService.unfollowUser(userId, material.uploader_id);
+        if (res && res.success !== false) {
+          setIsFollowing(false);
+          UIUtils.showAlert('Unfollowed', `You are no longer following ${material.uploader_name}.`);
+        } else {
+          throw res?.error || new Error('Failed to unfollow user');
+        }
+      } else {
+        const res = await supabaseService.followUser(userId, material.uploader_id);
+        if (res && res.success) {
+          setIsFollowing(true);
+          Alert.alert(
+            'Following',
+            `You are now following ${material.uploader_name}!`,
+            [
+              { text: 'OK' },
+              {
+                text: 'View Profile',
+                onPress: () => onViewUploaderProfile(),
+              },
+            ]
+          );
+        } else {
+          throw res?.error || new Error('Failed to follow user');
+        }
+      }
     } catch (err) {
       ErrorHandler.handle(err, 'Follow toggle error');
       UIUtils.showAlert('Error', 'Unable to update follow status. Please try again.');

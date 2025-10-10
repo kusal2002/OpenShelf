@@ -1197,6 +1197,207 @@ class SupabaseService {
       };
     }
   }
+
+  // Follow/Unfollow Methods
+
+  /**
+   * Follow a user
+   */
+  async followUser(followerId: string, followingId: string): Promise<ApiResponse<any>> {
+    try {
+      // Check if already following
+      const { data: existingFollow } = await supabase
+        .from('followers')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .single();
+
+      if (existingFollow) {
+        return { data: null, error: 'Already following this user', success: false };
+      }
+
+      // Insert follow relationship
+      const { data, error } = await supabase
+        .from('followers')
+        .insert([{
+          follower_id: followerId,
+          following_id: followingId,
+          created_at: new Date().toISOString()
+        }])
+        .select();
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      // Update follower counts
+      await this.updateFollowerCounts(followerId, followingId);
+
+      return { data, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to follow user',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Unfollow a user
+   */
+  async unfollowUser(followerId: string, followingId: string): Promise<ApiResponse<null>> {
+    try {
+      const { error } = await supabase
+        .from('followers')
+        .delete()
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId);
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      // Update follower counts
+      await this.updateFollowerCounts(followerId, followingId);
+
+      return { data: null, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to unfollow user',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Check if a user is following another user
+   */
+  async checkFollowStatus(followerId: string, followingId: string): Promise<ApiResponse<boolean>> {
+    try {
+      const { data, error } = await supabase
+        .from('followers')
+        .select('id')
+        .eq('follower_id', followerId)
+        .eq('following_id', followingId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is 'no rows returned'
+        return { data: null, error: error.message, success: false };
+      }
+
+      return { data: !!data, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to check follow status',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Get followers of a user
+   */
+  async getFollowers(userId: string): Promise<ApiResponse<User[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('followers')
+        .select(`
+          follower_id,
+          created_at,
+          users:follower_id (
+            id,
+            name,
+            email,
+            avatar_url
+          )
+        `)
+        .eq('following_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      const followers = data?.map(item => item.users).filter(Boolean) || [];
+      return { data: followers, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to get followers',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Get users that a user is following
+   */
+  async getFollowing(userId: string): Promise<ApiResponse<User[]>> {
+    try {
+      const { data, error } = await supabase
+        .from('followers')
+        .select(`
+          following_id,
+          created_at,
+          users:following_id (
+            id,
+            name,
+            email,
+            avatar_url
+          )
+        `)
+        .eq('follower_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        return { data: null, error: error.message, success: false };
+      }
+
+      const following = data?.map(item => item.users).filter(Boolean) || [];
+      return { data: following, error: null, success: true };
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to get following',
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Update follower and following counts for both users
+   */
+  private async updateFollowerCounts(followerId: string, followingId: string): Promise<void> {
+    try {
+      // Update follower count for the user being followed
+      const { data: followersCount } = await supabase
+        .from('followers')
+        .select('id', { count: 'exact' })
+        .eq('following_id', followingId);
+
+      await supabase
+        .from('users')
+        .update({ followers_count: followersCount?.length || 0 })
+        .eq('id', followingId);
+
+      // Update following count for the user doing the following
+      const { data: followingCount } = await supabase
+        .from('followers')
+        .select('id', { count: 'exact' })
+        .eq('follower_id', followerId);
+
+      await supabase
+        .from('users')
+        .update({ following_count: followingCount?.length || 0 })
+        .eq('id', followerId);
+    } catch (error) {
+      console.warn('Failed to update follower counts:', error);
+    }
+  }
 }
 
 // Create and export a singleton instance
