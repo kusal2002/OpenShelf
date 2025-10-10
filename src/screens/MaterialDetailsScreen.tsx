@@ -65,6 +65,19 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         console.log('Fetched reviews count:', data.length);
         console.log('Reviews data:', JSON.stringify(data, null, 2));
         setReviews(data);
+        
+        // Update material rating and count in real-time
+        if (data.length > 0) {
+          const totalRating = data.reduce((sum, review) => sum + review.rating, 0);
+          const averageRating = totalRating / data.length;
+          
+          // Update material object for immediate UI update
+          material.average_rating = parseFloat(averageRating.toFixed(2));
+          material.reviews_count = data.length;
+        } else {
+          material.average_rating = 0;
+          material.reviews_count = 0;
+        }
       }
     } catch (err) {
       ErrorHandler.handle(err, 'Error fetching reviews');
@@ -251,6 +264,24 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     }
   };
 
+  // Add helper function to render dynamic rating stars
+  const renderAverageRatingStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    
+    for (let i = 1; i <= 5; i++) {
+      if (i <= fullStars) {
+        stars.push(<Text key={i} style={styles.averageStarFull}>★</Text>);
+      } else if (i === fullStars + 1 && hasHalfStar) {
+        stars.push(<Text key={i} style={styles.averageStarHalf}>★</Text>);
+      } else {
+        stars.push(<Text key={i} style={styles.averageStarEmpty}>☆</Text>);
+      }
+    }
+    return stars;
+  };
+
   // Add a helper function to render stars for a rating
   const renderRatingStars = (rating: number) => {
     const stars = [];
@@ -323,11 +354,10 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         <View style={styles.ratingCard}>
           <View style={styles.ratingLeft}>
             <Text style={styles.ratingNumber}>{(material.average_rating || 0).toFixed(1)}</Text>
-            <Text style={styles.ratingStars}>⭐⭐⭐⭐⭐</Text>
-            <Text style={styles.reviewsCount}>{material.reviews_count || 0} reviews</Text>
-          </View>
-          <View style={styles.ratingBars}>
-            <Text style={styles.ratingBarText}>Ratings breakdown not available in this demo</Text>
+            <View style={styles.ratingStarsContainer}>
+              {renderAverageRatingStars(material.average_rating || 0)}
+            </View>
+            <Text style={styles.reviewsCount}>{reviews.length} review{reviews.length !== 1 ? 's' : ''}</Text>
           </View>
         </View>
 
@@ -350,7 +380,7 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
               <Text style={styles.primaryButtonText}>Download</Text>
             )}
           </TouchableOpacity>
-
+          
           <TouchableOpacity style={styles.ghostButton} onPress={onRead}>
             <Text style={styles.ghostButtonText}>Read</Text>
           </TouchableOpacity>
@@ -364,7 +394,7 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
           {busy.bookmark ? (
             <ActivityIndicator color={THEME_COLORS.primary} />
           ) : (
-            <Text style={styles.wishlistText}>{isBookmarked ? 'Bookmarked' : 'Add to Bookmark'}</Text>
+            <Text style={styles.primaryButtonText}>{isBookmarked ? 'Bookmarked' : 'Add to Bookmark'}</Text>
           )}
         </TouchableOpacity>
 
@@ -491,15 +521,15 @@ const styles = StyleSheet.create({
     marginTop: UI_CONSTANTS.spacing.xs,
   },
   ratingCard: {
-    flexDirection: 'row',
     backgroundColor: THEME_COLORS.surface,
     borderRadius: UI_CONSTANTS.borderRadius.md,
     padding: UI_CONSTANTS.spacing.md,
     marginBottom: UI_CONSTANTS.spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
     ...UI_CONSTANTS.elevation[1],
   },
   ratingLeft: {
-    width: 100,
     alignItems: 'center',
   },
   ratingNumber: {
@@ -508,6 +538,7 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.primary,
   },
   ratingStars: {
+    marginBottom: UI_CONSTANTS.spacing.md,
     marginTop: UI_CONSTANTS.spacing.xs,
     color: THEME_COLORS.secondary,
   },
@@ -515,15 +546,6 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.textSecondary,
     ...UI_CONSTANTS.typography.caption,
     marginTop: UI_CONSTANTS.spacing.xs,
-  },
-  ratingBars: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingLeft: UI_CONSTANTS.spacing.md,
-  },
-  ratingBarText: {
-    color: THEME_COLORS.textSecondary,
-    ...UI_CONSTANTS.typography.body2,
   },
   section: {
     marginTop: UI_CONSTANTS.spacing.md,
@@ -539,9 +561,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   buttonsRow: {
-    marginTop: UI_CONSTANTS.spacing.lg,
+    marginTop: UI_CONSTANTS.spacing.md,
     flexDirection: 'row',
-    marginTop: UI_CONSTANTS.spacing.lg,
     gap: UI_CONSTANTS.spacing.md,
   },
   primaryButton: {
@@ -580,18 +601,18 @@ const styles = StyleSheet.create({
   metaLabel: {
     color: THEME_COLORS.textSecondary,
     ...UI_CONSTANTS.typography.caption,
+    fontWeight: '600',
   },
   metaValue: {
     color: THEME_COLORS.text,
     ...UI_CONSTANTS.typography.body2,
     fontWeight: '600',
+    marginTop: UI_CONSTANTS.spacing.sm,
   },
   reviewFormContainer: {
     backgroundColor: THEME_COLORS.surface,
     borderRadius: UI_CONSTANTS.borderRadius.md,
     padding: UI_CONSTANTS.spacing.md,
-    marginTop: UI_CONSTANTS.spacing.sm,
-    ...UI_CONSTANTS.elevation[1],
   },
   reviewFormTitle: {
     color: THEME_COLORS.text,
@@ -601,12 +622,12 @@ const styles = StyleSheet.create({
   ratingContainer: {
     alignItems: 'center',
     flexDirection: 'row',
+    borderRadius: UI_CONSTANTS.borderRadius.md,
     marginBottom: UI_CONSTANTS.spacing.md,
   },
   ratingLabel: {
     color: THEME_COLORS.text,
     ...UI_CONSTANTS.typography.body2,
-    marginRight: UI_CONSTANTS.spacing.sm,
   },
   starsContainer: {
     flexDirection: 'row',
@@ -644,7 +665,6 @@ const styles = StyleSheet.create({
   reviewsListTitle: {
     color: THEME_COLORS.text,
     ...UI_CONSTANTS.typography.subtitle1,
-    marginBottom: UI_CONSTANTS.spacing.sm,
     fontWeight: '600',
   },
   reviewItem: {
@@ -673,7 +693,6 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.text,
     ...UI_CONSTANTS.typography.body2,
     marginTop: UI_CONSTANTS.spacing.sm,
-    lineHeight: 20,
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -695,5 +714,25 @@ const styles = StyleSheet.create({
     ...UI_CONSTANTS.typography.body2,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  ratingStarsContainer: {
+    flexDirection: 'row',
+    marginTop: UI_CONSTANTS.spacing.xs,
+  },
+  averageStarFull: {
+    color: THEME_COLORS.secondary,
+    fontSize: 16,
+    marginHorizontal: 1,
+  },
+  averageStarHalf: {
+    color: THEME_COLORS.secondary,
+    fontSize: 16,
+    marginHorizontal: 1,
+    opacity: 0.6,
+  },
+  averageStarEmpty: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 16,
+    marginHorizontal: 1,
   },
 });

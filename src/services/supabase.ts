@@ -1061,6 +1061,23 @@ class SupabaseService {
         throw error;
       }
 
+      // Update material rating based on current reviews
+      if (reviews && reviews.length > 0) {
+        const totalRating = reviews.reduce((sum: number, review: any) => sum + review.rating, 0);
+        const averageRating = totalRating / reviews.length;
+
+        // Update material in background (non-blocking)
+        supabase
+          .from('materials')
+          .update({
+            average_rating: parseFloat(averageRating.toFixed(2)),
+            reviews_count: reviews.length,
+          })
+          .eq('id', materialId)
+          .then(() => console.log('Material rating updated'))
+          .catch(err => console.warn('Failed to update material rating:', err));
+      }
+
       // Fetch user profiles for each review
       if (reviews && reviews.length > 0) {
         console.log('Enriching reviews with user data...');
