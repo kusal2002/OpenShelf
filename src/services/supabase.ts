@@ -1646,27 +1646,36 @@ class SupabaseService {
    */
   private async updateFollowerCounts(followerId: string, followingId: string): Promise<void> {
     try {
-      // Update follower count for the user being followed
-      const { data: followersCount } = await supabase
+      // Get accurate counts from followers table
+      const { data: followersData, error: followersError } = await supabase
         .from('followers')
-        .select('id', { count: 'exact' })
+        .select('id')
         .eq('following_id', followingId);
 
-      await supabase
-        .from('users')
-        .update({ followers_count: followersCount?.length || 0 })
-        .eq('id', followingId);
-
-      // Update following count for the user doing the following
-      const { data: followingCount } = await supabase
+      const { data: followingData, error: followingError } = await supabase
         .from('followers')
-        .select('id', { count: 'exact' })
+        .select('id')
         .eq('follower_id', followerId);
 
-      await supabase
-        .from('users')
-        .update({ following_count: followingCount?.length || 0 })
-        .eq('id', followerId);
+      if (!followersError) {
+        await supabase
+          .from('users')
+          .update({ 
+            followers_count: followersData?.length || 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', followingId);
+      }
+
+      if (!followingError) {
+        await supabase
+          .from('users')
+          .update({ 
+            following_count: followingData?.length || 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', followerId);
+      }
     } catch (error) {
       console.warn('Failed to update follower counts:', error);
     }
