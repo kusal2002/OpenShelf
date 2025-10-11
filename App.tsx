@@ -27,9 +27,6 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import MaterialDetailsScreen from './src/screens/MaterialDetailsScreen';
 import MaterialPreviewScreen from './src/screens/MaterialPreviewScreen';
 import UserProfileScreen from './src/screens/UserProfileScreen';
-import BookmarksScreen from './src/screens/BookmarksScreen';
-import DownloadsScreen from './src/screens/DownloadsScreen';
-import ReadingListScreen from './src/screens/ReadingListScreen';
 
 // Onboarding screens
 import Onboarding1Screen from './src/screens/Onboarding1Screen';
@@ -334,9 +331,6 @@ export default function App() {
                 <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: false, title: 'Preview' }} />
                 {/* User profile: keep header hidden (we use an in-screen back button) */}
                 <SScreen name="UserProfile" component={UserProfileScreen} options={{ headerShown: false, title: 'Profile' }} />
-                <SScreen name="Bookmarks" component={BookmarksScreen} options={{ headerShown: true, title: 'Bookmarks' }} />
-                <SScreen name="Downloads" component={DownloadsScreen} options={{ headerShown: true, title: 'Downloads' }} />
-                <SScreen name="ReadingList" component={ReadingListScreen} options={{ headerShown: true, title: 'Reading List' }} />
                 {/** TODO: <SScreen name="MaterialViewer" component={MaterialViewerScreen} /> */}
                 {/** TODO: <SScreen name="Settings" component={SettingsScreen} /> */}
               </SNav>

@@ -1,9 +1,6 @@
 -- OpenShelf University Library App - Supabase Database Schema
 -- Run these commands in your Supabase SQL editor
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
-
 -- Create users table for profiles
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
@@ -54,16 +51,9 @@ CREATE TABLE IF NOT EXISTS public.search_queries (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
-
--- Create bookmarks table (for future implementation)
-CREATE TABLE IF NOT EXISTS public.bookmarks (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    material_id UUID REFERENCES public.materials(id) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
     page_number INTEGER NOT NULL,
     title VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
-    UNIQUE(material_id, user_id, page_number)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
 -- Create notes table (for future implementation)
@@ -277,16 +267,3 @@ CREATE POLICY "Allow reading all search queries for analytics" ON public.search_
 
 CREATE POLICY "Service role can read all search queries" ON public.search_queries
     FOR SELECT USING (auth.jwt() ->> 'role' = 'service_role');
-
--- Add PDF content search columns to materials table
-ALTER TABLE public.materials 
-ADD COLUMN IF NOT EXISTS content_text TEXT,
-ADD COLUMN IF NOT EXISTS content_extraction_status VARCHAR(20) DEFAULT 'pending';
-
--- Create full-text search index for PDF content (requires pg_trgm extension)
-CREATE INDEX IF NOT EXISTS idx_materials_content_text_gin 
-ON public.materials USING gin(content_text gin_trgm_ops);
-
--- Create index for content extraction status
-CREATE INDEX IF NOT EXISTS idx_materials_content_extraction_status 
-ON public.materials(content_extraction_status);

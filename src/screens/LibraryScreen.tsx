@@ -32,7 +32,7 @@ import {
 import { SUB_CATEGORIES } from '../utils';
 import UploadMaterialModal from '../components/UploadMaterialModal';
 import { downloadFile } from '../utils/download';
-import { UIUtils, ErrorHandler, FileUtils } from '../utils';
+import { UIUtils, ErrorHandler } from '../utils';
 
 // Simple modern color scheme
 const colors = {
@@ -126,12 +126,9 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   // selectedSubCat moved here to ensure hooks run inside component scope
   const [selectedSubCat, setSelectedSubCat] = useState<SubCategory | 'All'>('All');
 
-  // Add selectedCategory state (fixes ReferenceError: selectedCategory doesn't exist)
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'bookmarks' | MaterialCategory>('all');
-
   // Enhanced UI state
   const [searchQuery, setSearchQuery] = useState('');
-  // (selectedCategory declared above)
+  const [selectedCategory, setSelectedCategory] = useState<MaterialCategory | 'all' | 'bookmarks'>('all');
   const [sortBy, setSortBy] = useState<'title' | 'date' | 'category' | 'downloads'>('date');
   const [showSortModal, setShowSortModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
@@ -147,9 +144,9 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     { key: 'downloads', label: 'Most Downloaded', icon: '⬇️' },
   ];
 
-  // Simplified category chips: only the top doc categories the user wanted
   const categories = [
     { key: 'all', label: 'All Materials', icon: '📚' },
+    { key: 'bookmarks', label: 'Bookmarks', icon: '🔖' },
     { key: 'textbook', label: 'Textbooks', icon: '📖' },
     { key: 'notes', label: 'Notes', icon: '📝' },
     { key: 'presentation', label: 'Presentations', icon: '🎭' },
@@ -158,128 +155,142 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     { key: 'thesis', label: 'Theses', icon: '🎓' },
     { key: 'reference', label: 'References', icon: '🔗' },
     { key: 'other', label: 'Other', icon: '📄' },
-  ];
+];
 
-  // Performance-optimized data fetching
-  const fetchUserMaterials = useCallback(async (isRefresh = false) => {
-    if (!user?.id) return;
+// Performance-optimized data fetching
+const fetchUserMaterials = useCallback(async (isRefresh = false) => {
+  if (!user?.id) return;
+  setLoading(prev => ({
+    ...prev,
+    initial: prev.initial && !isRefresh,
+    refresh: isRefresh,
+  }));
+  try {
+    const response = await supabaseService.getUserMaterials(user.id);
+    if (response.success && response.data) {
+      // Normalize materials so `sub_category` is always present
+      const normalized = (response.data || []).map((m: any) => {
+        const sub = m.sub_category || m.subcategory || m.subCategory || 'Other';
+        return { ...m, sub_category: sub } as Material;
+      });
+      setMaterials(normalized);
+    } else {
+      console.error('Failed to fetch user materials:', response.error);
+      Alert.alert('Error', response.error || 'Failed to load materials');
+    }
+  } catch (error) {
+    console.error('Unexpected error fetching materials:', error);
+    Alert.alert('Error', 'An unexpected error occurred while loading materials');
+  } finally {
     setLoading(prev => ({
       ...prev,
-      initial: prev.initial && !isRefresh,
-      refresh: isRefresh,
+      initial: false,
+      refresh: false,
     }));
-    try {
-      const response = await supabaseService.getUserMaterials(user.id);
-      if (response.success && response.data) {
-        // Normalize materials so `sub_category` is always present
-        const normalized = (response.data || []).map((m: any) => {
-          const sub = m.sub_category || m.subcategory || m.subCategory || 'Other';
-          return { ...m, sub_category: sub } as Material;
-        });
-        setMaterials(normalized);
-      } else {
-        console.error('Failed to fetch user materials:', response.error);
-        Alert.alert('Error', response.error || 'Failed to load materials');
-      }
-    } catch (error) {
-      console.error('Unexpected error fetching materials:', error);
-      Alert.alert('Error', 'An unexpected error occurred while loading materials');
-    } finally {
-      setLoading(prev => ({
-        ...prev,
-        initial: false,
-        refresh: false,
-      }));
-    }
-  }, [user?.id]);
+  }
+}, [user?.id]);
 
-  // Fetch bookmarked materials
-  const fetchBookmarkedMaterials = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(prev => ({ ...prev, action: true }));
-    try {
-      console.log('Fetching bookmarks for user:', user.id);
-      const response = await supabaseService.getBookmarkedMaterials(user.id);
-      if (response.success && response.data) {
-        console.log('Bookmarked materials fetched:', response.data.length);
-        setBookmarkedMaterials(response.data);
-        
-        // Also update any matching materials in the main list to show bookmark status
-        setMaterials(prevMaterials => {
-          return prevMaterials.map(material => {
-            const isBookmarked = response.data.some(bm => bm.id === material.id);
-            return isBookmarked ? { ...material, is_bookmarked: true } : material;
-          });
+// Fetch bookmarked materials
+const fetchBookmarkedMaterials = useCallback(async () => {
+  if (!user?.id) return;
+  setLoading(prev => ({ ...prev, action: true }));
+  try {
+    console.log('Fetching bookmarks for user:', user.id);
+    const response = await supabaseService.getBookmarkedMaterials(user.id);
+    if (response.success && response.data) {
+      console.log('Bookmarked materials fetched:', response.data.length);
+      setBookmarkedMaterials(response.data);
+      
+      // Also update any matching materials in the main list to show bookmark status
+      setMaterials(prevMaterials => {
+        return prevMaterials.map(material => {
+          const isBookmarked = response.data.some(bm => bm.id === material.id);
+          return isBookmarked ? { ...material, is_bookmarked: true } : material;
         });
-      } else {
-        console.error('Failed to fetch bookmarked materials:', response.error);
-      }
-    } catch (error) {
-      console.error('Unexpected error fetching bookmarks:', error);
-    } finally {
-      setLoading(prev => ({ ...prev, action: false }));
+      });
+    } else {
+      console.error('Failed to fetch bookmarked materials:', response.error);
     }
-  }, [user?.id]);
+  } catch (error) {
+    console.error('Unexpected error fetching bookmarks:', error);
+  } finally {
+    setLoading(prev => ({ ...prev, action: false }));
+  }
+}, [user?.id]);
 
   // Toggle bookmark status
-  const toggleBookmark = useCallback(async (material: Material) => {
-    if (!user?.id) return;
+const toggleBookmark = useCallback(async (material: Material) => {
+  if (!user?.id) return;
+  
+  try {
+    setLoading(prev => ({ ...prev, action: true }));
     
-    try {
-      setLoading(prev => ({ ...prev, action: true }));
-      
-      // Check if material is bookmarked
-      const isCurrentlyBookmarked = bookmarkedMaterials.some(m => m.id === material.id);
-      
-      if (isCurrentlyBookmarked) {
-        // Remove bookmark
-        const response = await supabaseService.removeBookmark(user.id, material.id);
-        if (response.success) {
-          // Remove from bookmarked materials
-          setBookmarkedMaterials(prev => prev.filter(m => m.id !== material.id));
+    // Check if material is bookmarked
+    const isCurrentlyBookmarked = bookmarkedMaterials.some(m => m.id === material.id);
+    
+    if (isCurrentlyBookmarked) {
+      // Remove bookmark
+      const response = await supabaseService.removeBookmark(user.id, material.id);
+      if (response.success) {
+        // Remove from bookmarked materials
+        setBookmarkedMaterials(prev => prev.filter(m => m.id !== material.id));
+        
+        // Different message when removing from the bookmarks view
+        if (selectedCategory === 'bookmarks') {
+          Alert.alert('Success', 'Bookmark removed from your library');
           
-          // Different message when removing from the bookmarks view
+          // This will trigger useEffect that calls applyFiltersAndSearch
+          setSelectedCategory('bookmarks');
+        } else {
           Alert.alert('Success', 'Bookmark removed');
-          
-          // Update material in the main materials list to reflect bookmark status
-          setMaterials(prev => prev.map(m => 
-            m.id === material.id ? { ...m, is_bookmarked: false } : m
-          ));
         }
-      } else {
-        // Add bookmark
-        const response = await supabaseService.addBookmark(user.id, material.id);
-        if (response.success) {
-          const updatedMaterial = { ...material, is_bookmarked: true };
-          setBookmarkedMaterials(prev => [...prev, updatedMaterial]);
-          Alert.alert('Success', 'Material bookmarked');
-          
-          // Update material in the main materials list to reflect bookmark status
-          setMaterials(prev => prev.map(m => 
-            m.id === material.id ? { ...m, is_bookmarked: true } : m
-          ));
-        }
+        
+        // Update material in the main materials list to reflect bookmark status
+        setMaterials(prev => prev.map(m => 
+          m.id === material.id ? { ...m, is_bookmarked: false } : m
+        ));
       }
-    } catch (error) {
-      console.error('Error toggling bookmark:', error);
-      Alert.alert('Error', 'Failed to update bookmark');
-    } finally {
-      setLoading(prev => ({ ...prev, action: false }));
+    } else {
+      // Add bookmark
+      const response = await supabaseService.addBookmark(user.id, material.id);
+      if (response.success) {
+        const updatedMaterial = { ...material, is_bookmarked: true };
+        setBookmarkedMaterials(prev => [...prev, updatedMaterial]);
+        Alert.alert('Success', 'Material bookmarked');
+        
+        // Update material in the main materials list to reflect bookmark status
+        setMaterials(prev => prev.map(m => 
+          m.id === material.id ? { ...m, is_bookmarked: true } : m
+        ));
+      }
     }
-  }, [user?.id, bookmarkedMaterials, selectedCategory]);// Advanced search and filtering
+  } catch (error) {
+    console.error('Error toggling bookmark:', error);
+    Alert.alert('Error', 'Failed to update bookmark');
+  } finally {
+    setLoading(prev => ({ ...prev, action: false }));
+  }
+}, [user?.id, bookmarkedMaterials, selectedCategory]);// Advanced search and filtering
   const applyFiltersAndSearch = useCallback(() => {
     let result = [...materials]; // Create a copy to avoid reference issues
-
-      // Apply category filter
-      if (selectedCategory && selectedCategory !== 'all') {
+    
+    // Handle bookmark filter specifically
+    if (selectedCategory === 'bookmarks') {
+      console.log('Applying bookmarks filter, found:', bookmarkedMaterials.length);
+      result = [...bookmarkedMaterials]; // Create a copy to avoid reference issues
+    } else {
+      // Apply category filter for non-bookmark views
+      if (selectedCategory !== 'all') {
         const selectedKey = String(selectedCategory).toLowerCase();
         result = result.filter(material => {
+          // compare both category and sub_category (case-insensitive)
           const cat = String(material.category || '').toLowerCase();
           const m: any = material as any;
           const sub = String(m.sub_category || m.subcategory || m.subCategory || '').toLowerCase();
           return cat === selectedKey || sub === selectedKey;
         });
       }
+    }
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -358,11 +369,6 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
 
       if (result.success) {
         await supabaseService.updateDownloadCount(material.id);
-
-        // mark as downloaded in local state so UI updates to "Downloaded"
-        setMaterials(prev => prev.map(m => m.id === material.id ? { ...m, is_downloaded: true, local_path: result.localPath } : m));
-        setFilteredMaterials(prev => prev.map(m => m.id === material.id ? { ...m, is_downloaded: true, local_path: result.localPath } : m));
-
         Alert.alert('Download Complete', `File saved to: ${result.localPath}`);
       } else {
         Alert.alert('Download Failed', result.error || 'An unknown error occurred.');
@@ -415,23 +421,23 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   };
 
   // Component lifecycle
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await supabaseService.getCurrentUser();
-        if (response.success && response.data) {
-          setUser(response.data);  // real Supabase AuthUser with UUID
-        } else {
-          console.error('No logged-in user:', response.error);
-          Alert.alert('Error', 'Please log in to view your library');
-        }
-      } catch (error) {
-        console.error('Error fetching current user:', error);
+useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      const response = await supabaseService.getCurrentUser();
+      if (response.success && response.data) {
+        setUser(response.data);  // real Supabase AuthUser with UUID
+      } else {
+        console.error('No logged-in user:', response.error);
+        Alert.alert('Error', 'Please log in to view your library');
       }
-    };
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+  };
 
-    fetchUser();
-  }, []);
+  fetchUser();
+}, []);
 
   // Load initial data when user is set
   useEffect(() => {
@@ -457,15 +463,14 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
   useEffect(() => {
     const params = route.params;
     if (params) {
-      // If caller asked to open bookmarks tab directly, navigate to the dedicated screen
+      // Check for initialTab parameter
       if (params.initialTab === 'bookmarks') {
-        console.log('Navigating to Bookmarks screen based on navigation params');
-        navigation.navigate('Bookmarks' as any);
-        return;
+        console.log('Setting active tab to bookmarks based on navigation params');
+        setSelectedCategory('bookmarks');
       }
-
-      // If params request refreshBookmarks, refresh bookmarks
-      if (params.refreshBookmarks) {
+      
+      // Check if we should refresh bookmarks
+      if (params.refreshBookmarks || params.initialTab === 'bookmarks') {
         console.log('Refreshing bookmarks based on navigation params');
         if (user?.id) {
           fetchBookmarkedMaterials();
@@ -482,213 +487,7 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
 
   useEffect(() => {
     applyFiltersAndSearch();
-  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch]);
-
-  // ---------- ADDED: Header, search, quick-links, categories, and material card ----------
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerContent}>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>My Library</Text>
-          <Text style={styles.headerSubtitle}>Manage and access your study materials</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
-            <Text>👩‍🎓</Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderSearchAndFilters = () => (
-    <View style={styles.searchContainer}>
-      <View style={styles.searchSection}>
-        <View style={styles.searchInputContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            placeholder="Search your library"
-            placeholderTextColor={colors.gray500}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchInput}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <Text style={styles.clearButtonText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={styles.sortButton}
-          onPress={() => setShowSortModal(true)}
-        >
-          <Text style={styles.sortButtonText}>⋯</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.viewToggle}
-          onPress={() => setIsGridView(prev => !prev)}
-        >
-          <Text style={styles.viewToggleText}>{isGridView ? '◻︎' : '◼︎'}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Quick links row */}
-      <View style={styles.quickLinksColumn}>
-        <TouchableOpacity style={styles.quickLinkRow} onPress={() => navigation.navigate('Downloads' as any)}>
-          <View style={styles.quickLinkIconBox}><Text style={styles.quickLinkIcon}>⬇️</Text></View>
-          <View style={styles.quickLinkTextWrap}>
-            <Text style={styles.quickLinkTitle}>Downloads</Text>
-            <Text style={styles.quickLinkSubtitle}>{/* show count if available */} {materials.filter(m => m.local_path || m.is_downloaded).length} items</Text>
-          </View>
-          <Text style={styles.quickLinkChevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.quickLinkRow} onPress={() => navigation.navigate('Bookmarks' as any)}>
-          <View style={styles.quickLinkIconBox}><Text style={styles.quickLinkIcon}>🔖</Text></View>
-          <View style={styles.quickLinkTextWrap}>
-            <Text style={styles.quickLinkTitle}>Bookmarks</Text>
-            <Text style={styles.quickLinkSubtitle}>{bookmarkedMaterials.length} items</Text>
-          </View>
-          <Text style={styles.quickLinkChevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.quickLinkRow} onPress={() => navigation.navigate('ReadingList' as any)}>
-          <View style={styles.quickLinkIconBox}><Text style={styles.quickLinkIcon}>📖</Text></View>
-          <View style={styles.quickLinkTextWrap}>
-            <Text style={styles.quickLinkTitle}>Reading List</Text>
-            <Text style={styles.quickLinkSubtitle}>{materials.filter(m => m.is_in_reading_list || m.reading_list).length} items</Text>
-          </View>
-          <Text style={styles.quickLinkChevron}>›</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* My Documents + category chips */}
-      <View style={styles.myDocsHeader}>
-        <Text style={styles.myDocsTitle}>My Documents</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subCatScroll} contentContainerStyle={styles.subCatContent}>
-          {categories.map(cat => {
-            const active = String(selectedCategory).toLowerCase() === String(cat.key).toLowerCase() || (selectedCategory === 'all' && cat.key === 'all');
-            return (
-              <TouchableOpacity
-                key={cat.key}
-                style={[styles.subCatChip, active && styles.subCatChipActive]}
-                onPress={() => {
-                  // toggle between 'all' and category
-                  if (cat.key === 'all') {
-                    setSelectedCategory('all');
-                  } else {
-                    setSelectedCategory(prev => (String(prev).toLowerCase() === cat.key ? 'all' : (cat.key as MaterialCategory)));
-                  }
-                }}
-              >
-                <Text style={[styles.subCatText, active && styles.subCatTextActive]}>
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-    </View>
-  );
-
-  const renderMaterialCard = ({ item }: { item: Material }) => {
-    // small utility for emoji file icon (keeps file icon logic local to this file)
-    const getFileIcon = (fileType?: string) => {
-      const t = (fileType || '').toLowerCase();
-      if (t.includes('pdf')) return '📄';
-      if (t.includes('doc') || t.includes('docx') || t.includes('word')) return '📝';
-      if (t.includes('ppt') || t.includes('pptx')) return '📊';
-      if (t.includes('xls') || t.includes('xlsx')) return '📈';
-      return '📁';
-    };
-
-    const isBookmarked = bookmarkedMaterials.some(b => b.id === item.id) || !!(item as any).is_bookmarked;
-    const isDownloaded = !!item.local_path || !!(item as any).is_downloaded;
-
-    return (
-      <View
-        style={[styles.materialCard, isGridView && styles.materialCardGrid]}
-      >
-        {/* Card header (menu / category) - separate from main touchable so menu works reliably */}
-        <View style={[styles.cardHeader, { position: 'relative' }]}>
-          <View style={styles.cardHeaderLeft}>
-            <Text style={styles.categoryBadge}>{item.category || (item.sub_category || 'Other')}</Text>
-          </View>
-
-          {/* absolutely positioned menu so it's never overlapped by the main touchable */}
-          <TouchableOpacity
-            onPress={() => {
-              console.log('menu pressed for material:', item.id);
-              setSelectedMaterial(item);
-              setShowActionsModal(true);
-            }}
-            style={[styles.cardMenu, styles.cardMenuAbsolute]}
-            accessibilityLabel="Open actions"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.cardMenuIcon}>⋯</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Main tappable area (navigates to details) */}
-        <TouchableOpacity
-          activeOpacity={0.92}
-          onPress={() => navigation.navigate('MaterialDetails' as any, { material: item } as any)}
-        >
-          <View style={styles.cardRow}>
-            <View style={[styles.cardThumbnail, { alignItems: 'center', justifyContent: 'center' }]}>
-              <Text style={{ fontSize: 28 }}>{getFileIcon(item.file_type)}</Text>
-            </View>
-
-            <View style={styles.cardContentRow}>
-              <Text style={styles.materialTitle} numberOfLines={2}>{item.title}</Text>
-
-              {item.description ? (
-                <Text style={styles.materialDescription} numberOfLines={2}>{item.description}</Text>
-              ) : null}
-
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, alignItems: 'center' }}>
-                <View>
-                  <Text style={styles.uploadDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-                  <Text style={styles.statText}>{(item.download_count || 0)} downloads</Text>
-                </View>
-
-                {/* Inline action buttons with text states */}
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <TouchableOpacity
-                    onPress={() => handleDownloadMaterial(item)}
-                    style={[styles.inlineButton, isDownloaded ? styles.inlineButtonSecondary : styles.inlineButtonPrimary]}
-                    disabled={isDownloaded || loading.action}
-                    accessibilityLabel={isDownloaded ? 'Downloaded' : 'Download'}
-                  >
-                    <Text style={[styles.inlineButtonText, isDownloaded ? styles.inlineButtonTextSecondary : styles.inlineButtonTextPrimary]}>
-                      {isDownloaded ? 'Downloaded' : 'Download'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => toggleBookmark(item)}
-                    style={[styles.inlineButton, isBookmarked ? styles.inlineButtonSecondary : styles.inlineButtonPrimary, { marginLeft: 8 }]}
-                    disabled={loading.action}
-                    accessibilityLabel={isBookmarked ? 'Bookmarked' : 'Bookmark'}
-                  >
-                    <Text style={[styles.inlineButtonText, isBookmarked ? styles.inlineButtonTextSecondary : styles.inlineButtonTextPrimary]}>
-                      {isBookmarked ? 'Bookmarked' : 'Bookmark'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-  // ---------- END ADDED ----------
+  }, [materials, searchQuery, selectedCategory, sortBy, applyFiltersAndSearch, selectedSubCat]);
 
   // Custom modal components
   const renderSortModal = () => (
@@ -799,6 +598,208 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
     </Modal>
   );
 
+  // Enhanced UI components
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.headerContent}>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>My Library</Text>
+          <Text style={styles.headerSubtitle}>
+            {filteredMaterials.length} material{filteredMaterials.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+      </View>
+      
+      {materials.length === 0 && !loading.initial && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            No materials uploaded yet. Start by uploading your first study material!
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderSearchAndFilters = () => (
+    <View style={styles.searchContainer}>
+      {/* Search Bar */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchInputContainer}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search materials..."
+            placeholderTextColor={colors.gray500}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => setSearchQuery('')}
+            >
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <TouchableOpacity
+          style={styles.sortButton}
+          onPress={() => setShowSortModal(true)}
+        >
+          <Text style={styles.sortButtonText}>⚡</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.viewToggle}
+          onPress={() => setIsGridView(!isGridView)}
+        >
+          <Text style={styles.viewToggleText}>
+            {isGridView ? '☰' : '▦'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Category Filter */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoryScroll}
+        contentContainerStyle={styles.categoryScrollContent}
+      >
+        {categories.map((category) => (
+          <TouchableOpacity
+            key={category.key}
+            style={[
+              styles.categoryChip,
+              selectedCategory === category.key && styles.categoryChipActive
+            ]}
+            onPress={() => setSelectedCategory(category.key as any)}
+          >
+            <Text style={styles.categoryIcon}>{category.icon}</Text>
+            <Text style={[
+              styles.categoryLabel,
+              selectedCategory === category.key && styles.categoryLabelActive
+            ]}>
+              {category.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const renderMaterialCard = ({ item }: { item: Material }) => (
+  <View
+    style={[
+      styles.materialCard,
+      isGridView && styles.materialCardGrid
+    ]}
+  >
+    {/* Card Header */}
+    <View style={styles.cardHeader}>
+      <View style={styles.cardHeaderLeft}>
+        <View style={styles.badgeContainer}>
+          <Text style={styles.categoryBadge}>
+            {categories.find(c => c.key === item.category)?.icon || '📄'} {item.category}
+          </Text>
+          
+          {bookmarkedMaterials.some(m => m.id === item.id) && (
+            <View style={styles.bookmarkIndicator}>
+              <Text style={styles.bookmarkBadge}>🔖 Bookmarked</Text>
+            </View>
+          )}
+        </View>
+      </View>
+      
+      {/* Triple Dots Menu */}
+      <TouchableOpacity
+        style={styles.cardMenu}
+        onPress={() => {
+          setSelectedMaterial(item);
+          setShowActionsModal(true); // show modal with actions
+        }}
+      >
+        <Text style={styles.cardMenuIcon}>⋮</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Touchable content area (Preview) */}
+    <TouchableOpacity
+      style={styles.cardContent}
+      activeOpacity={0.85}
+      onPress={() => {
+        setPreviewMaterial(item);
+        setShowPreviewModal(true);
+      }}
+    >
+      <Text style={styles.materialTitle} numberOfLines={2}>
+        {item.title}
+      </Text>
+      {item.description && (
+        <Text style={styles.materialDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+      )}
+    </TouchableOpacity>
+
+    {/* Card Footer */}
+    <View style={styles.cardFooter}>
+      <Text style={styles.statText}>📥 {item.download_count || 0}</Text>
+      <Text style={styles.statText}>📏 {(item.file_size / 1000000).toFixed(1)} MB</Text>
+      <Text style={styles.uploadDate}>
+        {new Date(item.created_at).toLocaleDateString()}
+      </Text>
+    </View>
+
+    {/* Action Buttons */}
+    <View style={styles.cardActions}>
+      <TouchableOpacity
+        style={[styles.actionButton, styles.primaryButton]}
+        onPress={() => handleDownloadMaterial(item)}
+      >
+        <Text style={styles.primaryButtonText}>Download</Text>
+      </TouchableOpacity>
+      
+      {selectedCategory !== 'bookmarks' && (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.secondaryButton]}
+          onPress={() => toggleBookmark(item)}
+        >
+          <Text style={styles.secondaryButtonText}>
+            {bookmarkedMaterials.some(m => m.id === item.id) 
+              ? 'Remove Bookmark' 
+              : 'Bookmark'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      
+      {selectedCategory === 'bookmarks' && (
+        <TouchableOpacity
+          style={[styles.actionButton, styles.warningButton]}
+          onPress={() => {
+            // Confirm before removing from bookmarks view
+            Alert.alert(
+              'Remove Bookmark',
+              'Are you sure you want to remove this material from your bookmarks?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Remove', 
+                  style: 'destructive',
+                  onPress: () => toggleBookmark(item)
+                }
+              ]
+            );
+          }}
+        >
+          <Text style={styles.warningButtonText}>Remove Bookmark</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  </View>
+);
+
   const renderPreviewModal = () => (
     <Modal
       visible={showPreviewModal}
@@ -904,16 +905,20 @@ function LibraryScreen({ navigation, route }: LibraryScreenProps) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {renderHeader()}
+      {renderSearchAndFilters()}
+      
+      {loading.action && (
+        <View style={styles.actionLoading}>
+          <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.actionLoadingText}>Processing...</Text>
+        </View>
+      )}
+
       <FlatList
         data={filteredMaterials}
         keyExtractor={(item) => item.id}
         renderItem={renderMaterialCard}
-        ListHeaderComponent={() => (
-          <View>
-            {renderHeader()}
-            {renderSearchAndFilters()}
-          </View>
-        )}
         refreshControl={
           <RefreshControl
             refreshing={loading.refresh}
@@ -1027,16 +1032,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 8,
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.gray100,
-    borderRadius: 12,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    height: 48,
+    height: 40,
   },
   searchIcon: {
     fontSize: 16,
@@ -1438,160 +1442,10 @@ const styles = StyleSheet.create({
   },
   previewActionContainer: {
     flexDirection: 'row', 
+    gap: 12, 
     padding: 20, 
     paddingTop: 8
   }
-  ,
-  // Quick links row (downloads/bookmarks/reading list)
-  quickLinksRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  quickLinksColumn: {
-    marginTop: 12,
-    flexDirection: 'column',
-    paddingHorizontal: 0,
-  },
-  quickLinkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 1,
-    width: '100%',
-  },
-  quickLinkIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: colors.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  quickLinkIcon: {
-    fontSize: 20,
-  },
-  quickLinkTextWrap: {
-    flex: 1,
-  },
-  quickLinkTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.gray800,
-  },
-  quickLinkSubtitle: {
-    fontSize: 12,
-    color: colors.gray500,
-    marginTop: 2,
-  },
-  quickLinkChevron: {
-    fontSize: 18,
-    color: colors.gray400,
-    marginLeft: 8,
-  },
-
-  // "My Documents" header and sub-category chips
-  myDocsHeader: {
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  myDocsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.gray900,
-    marginBottom: 8,
-  },
-  subCatScroll: {
-    paddingVertical: 4,
-  },
-  subCatContent: {
-    paddingRight: 16,
-  },
-  subCatChip: {
-    backgroundColor: colors.gray100,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  subCatChipActive: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  subCatText: {
-    fontSize: 14,
-    color: colors.gray700,
-    fontWeight: '600',
-  },
-  subCatTextActive: {
-    color: colors.primary,
-  },
-
-  // Thumbnail left layout for material card
-  cardThumbnail: {
-    width: 56,
-    height: 72,
-    borderRadius: 8,
-    backgroundColor: colors.gray100,
-    marginRight: 12,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  listCard: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-  },
-  cardContentRow: {
-    flex: 1,
-    flexDirection: 'column',
-  },
-  // Inline small text buttons
-  inlineButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 90,
-    alignItems: 'center',
-  },
-  inlineButtonPrimary: {
-    backgroundColor: colors.primary,
-  },
-  inlineButtonSecondary: {
-    backgroundColor: colors.gray100,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  inlineButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  inlineButtonTextPrimary: {
-    color: colors.white,
-  },
-  inlineButtonTextSecondary: {
-    color: colors.gray700,
-  },
-  metaRowInline: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  metaLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
 });
 
 export default LibraryScreen;
