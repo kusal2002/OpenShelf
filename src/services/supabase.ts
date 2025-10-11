@@ -652,10 +652,16 @@ class SupabaseService {
   }
 
   /**
-   * Search materials by title, category, or tags
+   * Search materials by title, category, or tags with improved precision
    */
   async searchMaterials(query: string, category?: MaterialCategory, subCategory?: SubCategory ): Promise<ApiResponse<Material[]>> {
     try {
+      const searchTerms = query.trim().toLowerCase().split(/\s+/).filter(term => term.length > 2);
+      
+      if (searchTerms.length === 0) {
+        return { data: [], error: null, success: true };
+      }
+
       let queryBuilder = supabase
         .from('materials')
         .select('*');
@@ -667,10 +673,34 @@ class SupabaseService {
         queryBuilder = queryBuilder.eq('sub_category', subCategory);
       }
 
+      // Build more precise search conditions
+      const searchConditions: string[] = [];
+      
+      // Exact title matches get highest priority
+      searchConditions.push(`title.ilike.%${query}%`);
+      
+      // Description matches
+      searchConditions.push(`description.ilike.%${query}%`);
+      
+      // Individual word matches in title (higher relevance)
+      searchTerms.forEach(term => {
+        searchConditions.push(`title.ilike.%${term}%`);
+      });
+      
+      // Tag matches
+      searchTerms.forEach(term => {
+        searchConditions.push(`tags.cs.{${term}}`);
+      });
+      
+      // Category matches
+      if (!category) {
+        searchConditions.push(`category.ilike.%${query}%`);
+      }
+
       const { data, error } = await queryBuilder
-        .or(`title.ilike.%${query}%,description.ilike.%${query}%,tags.cs.{${query}}`)
+        .or(searchConditions.join(','))
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(30); // Reduced limit for better relevance
 
       if (error) {
         return { data: null, error: error.message, success: false };
@@ -769,8 +799,8 @@ class SupabaseService {
 
       // 3) If HF key present, compute semantic similarity; else rely on keyword score only
   let final: { m: any; score: number; sem?: number; kw?: number }[] = [];
-  const MIN_SEM = 0.35;
-  const MIN_KW = 0.2;
+  const MIN_SEM = 0.5;   // Increased from 0.35 to be more strict
+  const MIN_KW = 0.3;    // Increased from 0.2 to be more strict
       if (this.hfApiKey) {
         const candidateTexts = combined.map((m) => this.composeMaterialText(m));
         const body = {
@@ -846,22 +876,80 @@ class SupabaseService {
     const tagsStr = Array.isArray(m.tags) ? m.tags.join(' ').toLowerCase() : '';
     const cat = String(m.category || '').toLowerCase();
     const sub = String(m.sub_category || '').toLowerCase();
+    const fileName = String(m.file_name || '').toLowerCase();
 
     let score = 0;
-    const wTitle = 2.0;
-    const wDesc = 1.0;
-    const wTags = 1.5;
-    const wCat = 0.8;
-    const wSub = 1.0;
+    let matchCount = 0;
+    
+    // Weights for different fields
+    const wTitleExact = 5.0;    // Exact title match
+    const wTitle = 3.0;         // Title contains term
+    const wDesc = 1.5;          // Description contains term
+    const wTags = 2.0;          // Tags match
+    const wCat = 2.5;           // Category match
+    const wSub = 1.8;           // Sub-category match
+    const wFileName = 1.2;      // File name match
 
     for (const t of qTokens) {
-      if (!t) continue;
-      if (title.includes(t)) score += wTitle;
-      if (desc.includes(t)) score += wDesc;
-      if (tagsStr.includes(t)) score += wTags;
-      if (cat === t) score += wCat;
-      if (sub.includes(t)) score += wSub; // allow partial for sub-category
+      if (!t || t.length < 2) continue;
+      
+      let termMatched = false;
+      
+      // Exact title match (highest priority)
+      if (title === t) {
+        score += wTitleExact;
+        termMatched = true;
+      }
+      // Title contains term
+      else if (title.includes(t)) {
+        score += wTitle;
+        termMatched = true;
+      }
+      
+      // Description contains term
+      if (desc.includes(t)) {
+        score += wDesc;
+        termMatched = true;
+      }
+      
+      // Tags match
+      if (tagsStr.includes(t)) {
+        score += wTags;
+        termMatched = true;
+      }
+      
+      // Category exact match
+      if (cat === t || cat.includes(t)) {
+        score += wCat;
+        termMatched = true;
+      }
+      
+      // Sub-category match
+      if (sub.includes(t)) {
+        score += wSub;
+        termMatched = true;
+      }
+      
+      // File name match
+      if (fileName.includes(t)) {
+        score += wFileName;
+        termMatched = true;
+      }
+      
+      if (termMatched) {
+        matchCount++;
+      }
     }
+    
+    // Penalize results that don't match all query terms
+    const completenessRatio = matchCount / qTokens.length;
+    score = score * completenessRatio;
+    
+    // Boost score if multiple terms are matched
+    if (matchCount > 1) {
+      score *= (1 + (matchCount - 1) * 0.2);
+    }
+    
     return score;
   }
 
@@ -1173,59 +1261,20 @@ class SupabaseService {
    */
   async getTrendingSearches(limit: number = 10): Promise<ApiResponse<string[]>> {
     try {
-      console.log('Fetching trending searches from database...');
-      // Try to get trending searches from the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      console.log('Looking for searches since:', sevenDaysAgo.toISOString());
+      // Return default trending searches since search_queries table doesn't exist yet
+      // This can be updated when the table is created in the database
+      const defaultTrending = [
+        'Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 
+        'Database Design', 'Computer Science', 'Mathematics', 'Physics', 
+        'Chemistry', 'Software Engineering', 'Web Development', 'Mobile Development'
+      ];
 
-      const { data, error } = await supabase
-        .from('search_queries')
-        .select('query')
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1000); // Get recent searches to aggregate
-
-      console.log('Database query result:', { data: data?.length, error });
-
-      if (error) {
-        console.warn('Trending searches database error:', error.message);
-        // If table doesn't exist, return default trending searches
-        return {
-          data: ['Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 'Database Design', 'Computer Science', 'Mathematics', 'Physics', 'Chemistry'],
-          error: null,
-          success: true
-        };
-      }
-
-      // Aggregate and count queries
-      const queryCounts: { [key: string]: number } = {};
-      data?.forEach((item: any) => {
-        const query = item.query;
-        queryCounts[query] = (queryCounts[query] || 0) + 1;
-      });
-
-      console.log('Query counts:', queryCounts);
-
-      // Sort by frequency and get top queries
-      const trending = Object.entries(queryCounts)
-        .sort(([,a], [,b]) => b - a)
-        .slice(0, limit)
-        .map(([query]) => query);
-
-      console.log('Calculated trending searches:', trending);
-
-      // If we don't have enough trending searches, fill with defaults
-      const defaultSearches = ['Machine Learning', 'Data Structures', 'React Native', 'Algorithms', 'Database Design'];
-      while (trending.length < limit && defaultSearches.length > 0) {
-        const defaultQuery = defaultSearches.shift();
-        if (defaultQuery && !trending.includes(defaultQuery)) {
-          trending.push(defaultQuery);
-        }
-      }
-
-      console.log('Final trending searches:', trending);
-            return { data: trending, error: null, success: true };
+      console.log('Using default trending searches (search_queries table not available)');
+      return {
+        data: defaultTrending.slice(0, limit),
+        error: null,
+        success: true
+      };
     } catch (error) {
       console.error('Trending searches error:', error);
       // Fallback to default trending searches
