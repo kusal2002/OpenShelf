@@ -587,13 +587,16 @@ class SupabaseService {
 
       console.log('Raw materials data sample:', data && data.length > 0 ? JSON.stringify(data[0]) : 'No data');
       
-      // Transform the response to include uploader_name in the Material object
+      // Transform the response to include uploader_name and ensure rating fields exist
       const materials = data?.map(item => {
         console.log(`Processing item ${item.id}, users:`, item.users);
         return {
           ...item,
           uploader_name: item.users?.name || 'Unknown',
-          users: undefined // Remove the nested users object
+          users: undefined, // Remove the nested users object
+          // Ensure rating fields are always present with default values
+          average_rating: item.average_rating || 0,
+          reviews_count: item.reviews_count || 0
         };
       }) || [];
 
@@ -627,11 +630,14 @@ class SupabaseService {
         return { data: null, error: error.message, success: false };
       }
 
-      // Transform the response to include uploader_name in the Material object
+      // Transform the response to include uploader_name and ensure rating fields exist
       const materials = data?.map(item => ({
         ...item,
         uploader_name: item.users?.name || 'Unknown',
-        users: undefined // Remove the nested users object
+        users: undefined, // Remove the nested users object
+        // Ensure rating fields are always present with default values
+        average_rating: item.average_rating || 0,
+        reviews_count: item.reviews_count || 0
       })) || [];
 
       return { data: materials, error: null, success: true };
@@ -1640,27 +1646,36 @@ class SupabaseService {
    */
   private async updateFollowerCounts(followerId: string, followingId: string): Promise<void> {
     try {
-      // Update follower count for the user being followed
-      const { data: followersCount } = await supabase
+      // Get accurate counts from followers table
+      const { data: followersData, error: followersError } = await supabase
         .from('followers')
-        .select('id', { count: 'exact' })
+        .select('id')
         .eq('following_id', followingId);
 
-      await supabase
-        .from('users')
-        .update({ followers_count: followersCount?.length || 0 })
-        .eq('id', followingId);
-
-      // Update following count for the user doing the following
-      const { data: followingCount } = await supabase
+      const { data: followingData, error: followingError } = await supabase
         .from('followers')
-        .select('id', { count: 'exact' })
+        .select('id')
         .eq('follower_id', followerId);
 
-      await supabase
-        .from('users')
-        .update({ following_count: followingCount?.length || 0 })
-        .eq('id', followerId);
+      if (!followersError) {
+        await supabase
+          .from('users')
+          .update({ 
+            followers_count: followersData?.length || 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', followingId);
+      }
+
+      if (!followingError) {
+        await supabase
+          .from('users')
+          .update({ 
+            following_count: followingData?.length || 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', followerId);
+      }
     } catch (error) {
       console.warn('Failed to update follower counts:', error);
     }

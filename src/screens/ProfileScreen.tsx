@@ -43,6 +43,8 @@ type Props = NativeStackScreenProps<MainTabParamList, 'Profile'>;
 interface ProfileStats {
   totalMaterials: number;
   totalDownloads: number;
+  followersCount: number;
+  followingCount: number;
 }
 
 interface AppSettings {
@@ -57,6 +59,8 @@ export const ProfileScreen = ({ navigation }: Props) => {
   const [profileStats, setProfileStats] = useState<ProfileStats>({
     totalMaterials: 0,
     totalDownloads: 0,
+    followersCount: 0,
+    followingCount: 0,
   });
   const [appSettings, setAppSettings] = useState<AppSettings>({
     darkMode: false,
@@ -78,6 +82,17 @@ export const ProfileScreen = ({ navigation }: Props) => {
     loadProfileData();
   }, []);
 
+  // Add focus listener to refresh profile data when returning to screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Refresh profile data when user returns to this screen
+      // This will catch any changes from follow/unfollow actions
+      loadProfileData();
+    });
+    
+    return unsubscribe;
+  }, [navigation]);
+
   const loadProfileData = async () => {
     try {
       setLoadingState('loading');
@@ -96,6 +111,11 @@ export const ProfileScreen = ({ navigation }: Props) => {
       if (isOnline) {
         // Get user materials for statistics
         const materialsResponse = await supabaseService.getUserMaterials(userResponse.data.id);
+        
+        // Get followers and following counts - always fetch fresh data
+        const followersResponse = await supabaseService.getFollowers(userResponse.data.id);
+        const followingResponse = await supabaseService.getFollowing(userResponse.data.id);
+        
         if (materialsResponse.success && materialsResponse.data) {
           const materials = materialsResponse.data;
           const totalDownloads = materials.reduce((sum, material) => sum + (material.download_count || 0), 0);
@@ -103,7 +123,16 @@ export const ProfileScreen = ({ navigation }: Props) => {
           setProfileStats({
             totalMaterials: materials.length,
             totalDownloads: totalDownloads,
+            followersCount: followersResponse.data?.length || 0,
+            followingCount: followingResponse.data?.length || 0,
           });
+        } else {
+          // Even if materials fetch fails, still update social counts
+          setProfileStats(prev => ({
+            ...prev,
+            followersCount: followersResponse.data?.length || 0,
+            followingCount: followingResponse.data?.length || 0,
+          }));
         }
       }
 
@@ -111,6 +140,24 @@ export const ProfileScreen = ({ navigation }: Props) => {
     } catch (error) {
       ErrorHandler.handle(error, 'Load profile error');
       setLoadingState('error');
+    }
+  };
+
+  // Add method to refresh just the social counts (lighter operation)
+  const refreshSocialCounts = async () => {
+    if (!currentUser || !isOnline) return;
+    
+    try {
+      const followersResponse = await supabaseService.getFollowers(currentUser.id);
+      const followingResponse = await supabaseService.getFollowing(currentUser.id);
+      
+      setProfileStats(prev => ({
+        ...prev,
+        followersCount: followersResponse.data?.length || 0,
+        followingCount: followingResponse.data?.length || 0,
+      }));
+    } catch (error) {
+      console.warn('Failed to refresh social counts:', error);
     }
   };
 
@@ -199,20 +246,25 @@ export const ProfileScreen = ({ navigation }: Props) => {
           <Text style={styles.statLabel}>Total Downloads</Text>
         </View>
         
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{isOnline ? '🌐' : '📱'}</Text>
-          <Text style={styles.statLabel}>{isOnline ? 'Online' : 'Offline'}</Text>
-        </View>
+        <TouchableOpacity 
+          style={styles.statCard}
+          onPress={refreshSocialCounts}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.statNumber}>{profileStats.followersCount}</Text>
+          <Text style={styles.statLabel}>Followers</Text>
+          <Text style={styles.tapToRefresh}>Tap to refresh</Text>
+        </TouchableOpacity>
         
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
-            {profileStats.totalMaterials > 0 
-              ? Math.round(profileStats.totalDownloads / profileStats.totalMaterials) 
-              : 0
-            }
-          </Text>
-          <Text style={styles.statLabel}>Avg Downloads</Text>
-        </View>
+        <TouchableOpacity 
+          style={styles.statCard}
+          onPress={refreshSocialCounts}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.statNumber}>{profileStats.followingCount}</Text>
+          <Text style={styles.statLabel}>Following</Text>
+          <Text style={styles.tapToRefresh}>Tap to refresh</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -538,6 +590,14 @@ const styles = StyleSheet.create({
     color: THEME_COLORS.textSecondary,
     textAlign: 'center',
     fontWeight: '500',
+  },
+  tapToRefresh: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.textTertiary,
+    textAlign: 'center',
+    fontSize: 10,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   settingsContainer: {
     padding: UI_CONSTANTS.spacing.lg,

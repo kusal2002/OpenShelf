@@ -429,6 +429,24 @@ export const HomeScreen = ({ navigation }: Props) => {
           <Text style={styles.uploaderInfo}>
             👤 Uploaded by: {item.uploader_name || 'Unknown'}
           </Text>
+          
+          {/* Rating Display */}
+          <View style={styles.ratingContainer}>
+            <View style={styles.starsContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Text key={star} style={styles.starIcon}>
+                  {star <= Math.floor(item.average_rating || 0) ? '★' : '☆'}
+                </Text>
+              ))}
+            </View>
+            <Text style={styles.ratingText}>
+              {(item.average_rating || 0).toFixed(1)}
+            </Text>
+            <Text style={styles.reviewCount}>
+              ({(item.reviews_count || 0)} {(item.reviews_count || 0) === 1 ? 'review' : 'reviews'})
+            </Text>
+          </View>
+          
           <View style={styles.materialMeta}>
             <Text style={styles.materialCategory}>{item.category}</Text>
             <Text style={styles.materialSize}>
@@ -789,6 +807,29 @@ const styles = StyleSheet.create({
   materialSize: {
     ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textTertiary,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: UI_CONSTANTS.spacing.xs,
+    gap: UI_CONSTANTS.spacing.xs,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  starIcon: {
+    fontSize: 14,
+    color: THEME_COLORS.secondary,
+  },
+  ratingText: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.text,
+    fontWeight: '600',
+  },
+  reviewCount: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.textSecondary,
   },
   bookmarkIconContainer: {
     position: 'absolute',
