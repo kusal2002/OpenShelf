@@ -31,7 +31,7 @@ const COLORS = {
   primary600: '#2563eb',
   primary700: '#1d4ed8',
   secondary: '#64748b',
-  success: '#22c55e',
+  success: '#2563eb',
   warning: '#f59e0b',
   error: '#ef4444',
   gray50: '#f9fafb',
