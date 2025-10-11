@@ -14,7 +14,6 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 // Services and utilities
 import { supabaseService, onAuthStateChange } from './src/services/supabase';
 import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
-import { ThemeProvider } from './src/theme/ThemeProvider';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -83,15 +82,8 @@ function OnboardingStack() {
 
 // Main App Tabs Navigator  
 function MainTabs() {
-  const { theme, isDark } = require('./src/theme/ThemeProvider').useTheme();
   const TNav: any = Tab.Navigator;
   const TScreen: any = Tab.Screen;
-
-  // Choose nav background based on current theme mode
-  const navBackground = isDark ? '#0F172A' : '#FFFFFF';
-  const navBorder = isDark ? '#1e293b' : '#E6EEF2';
-  const inactiveTint = isDark ? '#94A3B8' : '#64748B';
-
   return (
     <TNav
       initialRouteName="Home"
@@ -101,15 +93,15 @@ function MainTabs() {
         headerTintColor: THEME_COLORS.background,
         headerTitleStyle: { fontWeight: 'bold' },
         tabBarStyle: {
-          backgroundColor: navBackground,
-          borderTopColor: navBorder,
+          backgroundColor: THEME_COLORS.background,
+          borderTopColor: THEME_COLORS.border,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
         },
-        tabBarActiveTintColor: '#2563EB', // project blue remains consistent
-        tabBarInactiveTintColor: inactiveTint,
+        tabBarActiveTintColor: THEME_COLORS.primary,
+        tabBarInactiveTintColor: THEME_COLORS.textSecondary,
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
@@ -286,13 +278,11 @@ export default function App() {
   if (authState.loading || onboardingComplete === null) {
     return (
       <SafeAreaProvider>
-        <ThemeProvider>
-          <StatusBar
-            barStyle="dark-content"
-            backgroundColor={THEME_COLORS.background}
-          />
-          <LoadingScreen />
-        </ThemeProvider>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={THEME_COLORS.background}
+        />
+        <LoadingScreen />
       </SafeAreaProvider>
     );
   }
@@ -302,12 +292,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={THEME_COLORS.background}
-        />
-        <NavigationContainer>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={THEME_COLORS.background}
+      />
+      <NavigationContainer>
         {authState.isAuthenticated ? (
           (() => {
             const SNav: any = Stack.Navigator;
@@ -347,7 +336,6 @@ export default function App() {
           onboardingComplete ? <AuthStack /> : <OnboardingStack />
         )}
       </NavigationContainer>
-      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
