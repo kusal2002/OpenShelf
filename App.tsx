@@ -80,8 +80,15 @@ function OnboardingStack() {
 
 // Main App Tabs Navigator  
 function MainTabs() {
+  const { theme, isDark } = require('./src/theme/ThemeProvider').useTheme();
   const TNav: any = Tab.Navigator;
   const TScreen: any = Tab.Screen;
+
+  // Choose nav background based on current theme mode
+  const navBackground = isDark ? '#0F172A' : '#FFFFFF';
+  const navBorder = isDark ? '#1e293b' : '#E6EEF2';
+  const inactiveTint = isDark ? '#94A3B8' : '#64748B';
+
   return (
     <TNav
       initialRouteName="Home"
@@ -91,15 +98,15 @@ function MainTabs() {
         headerTintColor: THEME_COLORS.background,
         headerTitleStyle: { fontWeight: 'bold' },
         tabBarStyle: {
-          backgroundColor: THEME_COLORS.background,
-          borderTopColor: THEME_COLORS.border,
+          backgroundColor: navBackground,
+          borderTopColor: navBorder,
           borderTopWidth: 1,
           paddingBottom: 8,
           paddingTop: 8,
           height: 60,
         },
-        tabBarActiveTintColor: THEME_COLORS.primary,
-        tabBarInactiveTintColor: THEME_COLORS.textSecondary,
+        tabBarActiveTintColor: '#2563EB', // project blue remains consistent
+        tabBarInactiveTintColor: inactiveTint,
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >

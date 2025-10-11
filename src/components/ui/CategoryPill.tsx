@@ -67,13 +67,14 @@ export const CategoryPill: React.FC<CategoryPillProps> = ({
         {/* Count badge in top-right */}
         {count !== undefined && count > 0 && (
           <View style={[styles.countBadge, { backgroundColor: isActive ? theme.textInverse : theme.primary }]}>
-            <Text style={[styles.countText, { color: isActive ? theme.primary : theme.textInverse }]}>
+            {/* If badge is white (textInverse), use theme.primary for number; if badge is primary (blue), use white for number */}
+            <Text style={[styles.countText, { color: isActive ? theme.primary : '#FFFFFF' }] }>
               {count}
             </Text>
           </View>
         )}
         
-        <Text style={styles.icon}>{icon}</Text>
+        <Text style={[styles.icon, { color: isActive ? theme.textInverse : theme.text }]}>{icon}</Text>
         <Text style={[
           styles.label,
           {
