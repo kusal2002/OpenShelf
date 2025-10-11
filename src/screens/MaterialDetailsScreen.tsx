@@ -8,21 +8,164 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { THEME_COLORS, UI_CONSTANTS, UIComponents, DateUtils, FileUtils, UIUtils, ErrorHandler, downloadFile } from '../utils';
 import { supabaseService } from '../services/supabase';
+
+// Add this interface for Review type
+interface Review {
+  id?: number;
+  user_id: string;
+  material_id: string;
+  rating: number;
+  comment: string | null;
+  created_at?: string;
+  user?: {
+    full_name?: string;
+    email?: string;
+  };
+}
 
 // Keep props untyped to avoid strict param coupling in refactor
 export default function MaterialDetailsScreen({ route, navigation }: any) {
   const material = useMemo(() => route?.params?.material || {}, [route?.params?.material]);
 
   const [isBookmarked, setIsBookmarked] = useState<boolean>(!!material.is_bookmarked);
-  const [busy, setBusy] = useState<{ bookmark?: boolean; download?: boolean }>({});
+  const [busy, setBusy] = useState<{ bookmark?: boolean; download?: boolean; review?: boolean; follow?: boolean }>({});
+  
+  // New state for review form
+  const [userRating, setUserRating] = useState<number>(0);
+  const [reviewText, setReviewText] = useState<string>('');
+
+  // Add state for reviews
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
+
+  // Add state for follow functionality
+  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [uploaderProfile, setUploaderProfile] = useState<any>(null);
+
+  // Add state to track if should show follow button
+  const [showFollowButton, setShowFollowButton] = useState<boolean>(false);
 
   useEffect(() => {
     setIsBookmarked(!!material.is_bookmarked);
   }, [material]);
+
+  // Add useEffect to fetch reviews when screen loads
+  useEffect(() => {
+    fetchReviews();
+    // Fetch uploader info if not already present
+    if (material.id && !material.uploader_name) {
+      fetchUploaderInfo();
+    }
+    // Check follow status and fetch uploader profile
+    if (material.uploader_id) {
+      checkFollowStatus();
+      fetchUploaderProfile();
+      // Check if should show follow button
+      shouldShowFollowButton().then(setShowFollowButton);
+    }
+  }, [material.id, material.uploader_id]);
+
+  const fetchReviews = async () => {
+    if (!material.id) return;
+    
+    try {
+      setLoadingReviews(true);
+      const { data, error } = await supabaseService.getReviewsForMaterial(material.id);
+      
+      if (error) throw error;
+      
+      if (data) {
+        console.log('Fetched reviews count:', data.length);
+        console.log('Reviews data:', JSON.stringify(data, null, 2));
+        setReviews(data);
+        
+        // Update material rating and count in real-time
+        if (data.length > 0) {
+          const totalRating = data.reduce((sum, review) => sum + review.rating, 0);
+          const averageRating = totalRating / data.length;
+          
+          // Update material object for immediate UI update
+          material.average_rating = parseFloat(averageRating.toFixed(2));
+          material.reviews_count = data.length;
+        } else {
+          material.average_rating = 0;
+          material.reviews_count = 0;
+        }
+      }
+    } catch (err) {
+      ErrorHandler.handle(err, 'Error fetching reviews');
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+  
+  const fetchUploaderInfo = async () => {
+    if (!material.id) return;
+    
+    try {
+      const { data } = await supabaseService.getMaterialById(material.id);
+      if (data) {
+        // Update the material object with uploader info
+        if (data.uploader_name || data.user?.name) {
+          material.uploader_name = data.uploader_name || data.user?.name;
+        }
+        if (data.uploader_id || data.user_id) {
+          material.uploader_id = data.uploader_id || data.user_id;
+        }
+        // Also check if there's user information in the data
+        if (data.user && data.user.name && !material.uploader_name) {
+          material.uploader_name = data.user.name;
+        }
+        
+        // Force a re-render by updating state
+        setIsBookmarked(prev => prev);
+        
+        // After fetching uploader info, check follow status and show follow button
+        if (material.uploader_id) {
+          checkFollowStatus();
+          fetchUploaderProfile();
+          shouldShowFollowButton().then(setShowFollowButton);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch uploader info:', err);
+    }
+  };
+
+  const checkFollowStatus = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) return;
+      
+      const userId = session.user.id;
+      if (userId === material.uploader_id) return; // Don't check if viewing own material
+      
+      const { data } = await supabaseService.checkFollowStatus(userId, material.uploader_id);
+      setIsFollowing(!!data);
+    } catch (err) {
+      console.warn('Failed to check follow status:', err);
+    }
+  };
+
+  const fetchUploaderProfile = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      const { data } = await supabaseService.getUserProfile(material.uploader_id);
+      if (data) {
+        setUploaderProfile(data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch uploader profile:', err);
+    }
+  };
 
   const onBookmark = async () => {
     try {
@@ -157,8 +300,229 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
     Alert.alert('Preview Unavailable', 'A preview is not available for this material.');
   };
 
+  const onSubmitReview = async () => {
+    if (userRating === 0) {
+      Alert.alert('Rating Required', 'Please select a rating before submitting your review.');
+      return;
+    }
+    
+    try {
+      setBusy(prev => ({ ...prev, review: true }));
+      
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) {
+        Alert.alert('Sign In Required', 'Please sign in to submit reviews.');
+        return;
+      }
+      
+      const userId = session.user.id;
+      
+      // Add review to database
+      const res = await supabaseService.addReview({
+        user_id: userId,
+        material_id: material.id,
+        rating: userRating,
+        comment: reviewText.trim() || null
+      });
+      
+      // Modify the success block to refresh reviews after submission
+      if (res && res.success) {
+        Alert.alert('Review Submitted', 'Thank you for your feedback!');
+        // Reset form
+        setUserRating(0);
+        setReviewText('');
+        
+        // Refresh reviews
+        fetchReviews();
+      } else {
+        throw res?.error || new Error('Failed to submit review');
+      }
+    } catch (err) {
+      ErrorHandler.handle(err, 'Review submission error');
+      UIUtils.showAlert('Error', 'Unable to submit your review. Please try again.');
+    } finally {
+      setBusy(prev => ({ ...prev, review: false }));
+    }
+  };
+
+  // Add helper function to render dynamic rating stars
+  const renderAverageRatingStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    
+    for (let i = 1; i <= 5; i++) {
+      if (i <= fullStars) {
+        stars.push(<Text key={i} style={styles.averageStarFull}>★</Text>);
+      } else if (i === fullStars + 1 && hasHalfStar) {
+        stars.push(<Text key={i} style={styles.averageStarHalf}>★</Text>);
+      } else {
+        stars.push(<Text key={i} style={styles.averageStarEmpty}>☆</Text>);
+      }
+    }
+    return stars;
+  };
+
+  // Add a helper function to render stars for a rating
+  const renderRatingStars = (rating: number) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <Text key={i} style={{ color: i <= rating ? THEME_COLORS.secondary : THEME_COLORS.textSecondary }}>
+          {i <= rating ? '★' : '☆'}
+        </Text>
+      );
+    }
+    return <View style={{ flexDirection: 'row' }}>{stars}</View>;
+  };
+  
+  // Add a helper function to render a review item
+  const renderReviewItem = (review: Review, index: number) => {
+    return (
+      <View key={review.id || index} style={styles.reviewItem}>
+        <View style={styles.reviewHeader}>
+          <Text style={styles.reviewAuthor}>
+            {review.user?.full_name || 'Anonymous User'}
+          </Text>
+          <Text style={styles.reviewDate}>
+            {review.created_at ? DateUtils.formatDate(review.created_at) : ''}
+          </Text>
+        </View>
+        {renderRatingStars(review.rating)}
+        {review.comment ? (
+          <Text style={styles.reviewComment}>{review.comment}</Text>
+        ) : null}
+      </View>
+    );
+  };
+  
+  const renderStarRating = () => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <TouchableOpacity 
+          key={i} 
+          onPress={() => setUserRating(i)}
+          style={styles.starButton}
+        >
+          <Text style={[styles.starIcon, i <= userRating ? styles.starSelected : null]}>
+            {i <= userRating ? '★' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return stars;
+  };
+  
+  const onFollowToggle = async () => {
+    if (!material.uploader_id) return;
+    
+    try {
+      setBusy(prev => ({ ...prev, follow: true }));
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) {
+        Alert.alert('Sign In Required', 'Please sign in to follow users.');
+        return;
+      }
+      
+      const userId = session.user.id;
+      if (userId === material.uploader_id) {
+        Alert.alert('Error', 'You cannot follow yourself.');
+        return;
+      }
+
+      if (isFollowing) {
+        const res = await supabaseService.unfollowUser(userId, material.uploader_id);
+        if (res && res.success !== false) {
+          setIsFollowing(false);
+          UIUtils.showAlert('Unfollowed', `You are no longer following ${material.uploader_name}.`);
+        } else {
+          throw res?.error || new Error('Failed to unfollow user');
+        }
+      } else {
+        const res = await supabaseService.followUser(userId, material.uploader_id);
+        if (res && res.success) {
+          setIsFollowing(true);
+          Alert.alert(
+            'Following',
+            `You are now following ${material.uploader_name}!`,
+            [
+              { text: 'OK' },
+              {
+                text: 'View Profile',
+                onPress: () => onViewUploaderProfile(),
+              },
+            ]
+          );
+        } else {
+          throw res?.error || new Error('Failed to follow user');
+        }
+      }
+    } catch (err) {
+      ErrorHandler.handle(err, 'Follow toggle error');
+      UIUtils.showAlert('Error', 'Unable to update follow status. Please try again.');
+    } finally {
+      setBusy(prev => ({ ...prev, follow: false }));
+    }
+  };
+
+  const onViewUploaderProfile = () => {
+    // Check if we have uploader_id, if not try user_id from material
+    const uploaderId = material.uploader_id || material.user_id;
+    const uploaderName = material.uploader_name || 'Unknown User';
+    
+    if (!uploaderId) {
+      Alert.alert(
+        'Profile Unavailable', 
+        'Unable to load uploader profile. The uploader information may not be available.',
+        [
+          { text: 'OK' },
+          {
+            text: 'Refresh',
+            onPress: () => {
+              // Try to fetch uploader info again
+              fetchUploaderInfo();
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Navigate directly without try/catch since we added UserProfile to navigation
+    navigation.navigate('UserProfile', { 
+      userId: uploaderId,
+      userName: uploaderName
+    });
+  };
+
+  const shouldShowFollowButton = async () => {
+    // Check for uploader_id or user_id
+    const uploaderId = material.uploader_id || material.user_id;
+    if (!uploaderId) return false;
+    
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (!session) return false;
+      
+      return uploaderId !== session.user.id;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
+      {/* In-screen overlay back button (keeps top bar hidden globally) */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        onPress={() => navigation.goBack()}
+        style={styles.overlayBackButton}
+      >
+        <Text style={styles.overlayBackIcon}>←</Text>
+      </TouchableOpacity>
+
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.coverContainer}>
           {material.cover_url ? (
@@ -173,16 +537,46 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={2}>{material.title || 'Untitled'}</Text>
           {material.author && <Text style={styles.author}>by {material.author}</Text>}
+          {material.uploader_name && (
+            <View style={styles.uploaderContainer}>
+              <TouchableOpacity 
+                onPress={onViewUploaderProfile}
+                style={styles.uploaderNameContainer}
+                disabled={!material.uploader_id && !material.user_id}
+              >
+                <Text style={styles.uploaderInfo}>
+                  📤 Uploaded by <Text style={[styles.uploaderNameLink, (!material.uploader_id && !material.user_id) ? styles.disabledLink : null]}>
+                    {material.uploader_name}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+              
+              {showFollowButton && (
+                <TouchableOpacity
+                  style={[styles.followButton, isFollowing ? styles.followingButton : null]}
+                  onPress={onFollowToggle}
+                  disabled={busy.follow}
+                >
+                  {busy.follow ? (
+                    <ActivityIndicator size="small" color={isFollowing ? THEME_COLORS.text : THEME_COLORS.textInverse} />
+                  ) : (
+                    <Text style={[styles.followButtonText, isFollowing ? styles.followingButtonText : null]}>
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
 
         <View style={styles.ratingCard}>
           <View style={styles.ratingLeft}>
             <Text style={styles.ratingNumber}>{(material.average_rating || 0).toFixed(1)}</Text>
-            <Text style={styles.ratingStars}>⭐⭐⭐⭐⭐</Text>
-            <Text style={styles.reviewsCount}>{material.reviews_count || 0} reviews</Text>
-          </View>
-          <View style={styles.ratingBars}>
-            <Text style={styles.ratingBarText}>Ratings breakdown not available in this demo</Text>
+            <View style={styles.ratingStarsContainer}>
+              {renderAverageRatingStars(material.average_rating || 0)}
+            </View>
+            <Text style={styles.reviewsCount}>{reviews.length} review{reviews.length !== 1 ? 's' : ''}</Text>
           </View>
         </View>
 
@@ -205,7 +599,7 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
               <Text style={styles.primaryButtonText}>Download</Text>
             )}
           </TouchableOpacity>
-
+          
           <TouchableOpacity style={styles.ghostButton} onPress={onRead}>
             <Text style={styles.ghostButtonText}>Read</Text>
           </TouchableOpacity>
@@ -219,7 +613,7 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
           {busy.bookmark ? (
             <ActivityIndicator color={THEME_COLORS.primary} />
           ) : (
-            <Text style={styles.wishlistText}>{isBookmarked ? 'Bookmarked' : 'Add to Bookmark'}</Text>
+            <Text style={styles.primaryButtonText}>{isBookmarked ? 'Bookmarked' : 'Add to Bookmark'}</Text>
           )}
         </TouchableOpacity>
 
@@ -234,13 +628,80 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.metaRow}>
+          <Text style={styles.metaLabel}>Uploaded by</Text>
+          <TouchableOpacity 
+            onPress={onViewUploaderProfile}
+            disabled={!material.uploader_id && !material.user_id}
+          >
+            <Text style={[styles.metaValue, styles.uploaderLink, (!material.uploader_id && !material.user_id) ? styles.disabledLink : null]}>
+              {material.uploader_name || 'Unknown'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.metaRow}>
           <Text style={styles.metaLabel}>Uploaded</Text>
           <Text style={styles.metaValue}>{material.created_at ? DateUtils.formatDate(material.created_at) : '—'}</Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Reviews</Text>
-          <Text style={styles.sectionBody}>Reviews list not implemented in this demo.</Text>
+          
+          <View style={styles.reviewFormContainer}>
+            <Text style={styles.reviewFormTitle}>Write a Review</Text>
+            
+            <View style={styles.ratingContainer}>
+              <Text style={styles.ratingLabel}>Your Rating:</Text>
+              <View style={styles.starsContainer}>
+                {renderStarRating()}
+              </View>
+            </View>
+            
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Share your thoughts about this material (optional)"
+              placeholderTextColor={THEME_COLORS.textSecondary}
+              multiline={true}
+              value={reviewText}
+              onChangeText={setReviewText}
+              maxLength={500}
+            />
+            
+            <TouchableOpacity
+              style={[styles.submitReviewButton, busy.review ? { opacity: 0.8 } : null]}
+              onPress={onSubmitReview}
+              disabled={busy.review || userRating === 0}
+            >
+              {busy.review ? (
+                <ActivityIndicator color={THEME_COLORS.textInverse} />
+              ) : (
+                <Text style={styles.submitReviewText}>Submit Review</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.reviewsList}>
+            <Text style={styles.reviewsListTitle}>
+              {reviews.length > 0 ? `All Reviews (${reviews.length})` : 'No reviews yet. Be the first to review!'}
+            </Text>
+            
+            {loadingReviews ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={THEME_COLORS.primary} />
+                <Text style={styles.loadingText}>Loading reviews...</Text>
+              </View>
+            ) : reviews.length > 0 ? (
+              <>
+                {reviews.map((review, index) => renderReviewItem(review, index))}
+              </>
+            ) : (
+              <View style={styles.emptyReviewsContainer}>
+                <Text style={styles.emptyReviewsText}>
+                  No reviews yet. Share your thoughts and be the first to review this material!
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
       </ScrollView>
@@ -251,10 +712,12 @@ export default function MaterialDetailsScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: THEME_COLORS.background },
   container: {
+    flexGrow: 1,
     padding: UI_CONSTANTS.spacing.lg,
     paddingBottom: 64,
   },
   coverContainer: {
+    margin: UI_CONSTANTS.spacing.lg,
     alignItems: 'center',
     marginBottom: UI_CONSTANTS.spacing.lg,
   },
@@ -279,66 +742,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    ...UI_CONSTANTS.typography.h4,
     color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.h4,
     textAlign: 'center',
   },
   author: {
-    ...UI_CONSTANTS.typography.body2,
     color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.body2,
     marginTop: UI_CONSTANTS.spacing.xs,
   },
+  uploaderContainer: {
+    alignItems: 'center',
+    marginTop: UI_CONSTANTS.spacing.xs,
+  },
+  uploaderNameContainer: {
+    marginBottom: UI_CONSTANTS.spacing.xs,
+  },
+  uploaderNameLink: {
+    color: THEME_COLORS.primary,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
   ratingCard: {
-    flexDirection: 'row',
     backgroundColor: THEME_COLORS.surface,
-    padding: UI_CONSTANTS.spacing.md,
     borderRadius: UI_CONSTANTS.borderRadius.md,
+    padding: UI_CONSTANTS.spacing.md,
     marginBottom: UI_CONSTANTS.spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
     ...UI_CONSTANTS.elevation[1],
   },
   ratingLeft: {
-    width: 100,
     alignItems: 'center',
   },
   ratingNumber: {
-    fontSize: 28,
     fontWeight: '700',
+    fontSize: 28,
     color: THEME_COLORS.primary,
   },
   ratingStars: {
-    color: THEME_COLORS.secondary,
+    marginBottom: UI_CONSTANTS.spacing.md,
     marginTop: UI_CONSTANTS.spacing.xs,
+    color: THEME_COLORS.secondary,
   },
   reviewsCount: {
+    color: THEME_COLORS.textSecondary,
     ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
     marginTop: UI_CONSTANTS.spacing.xs,
-  },
-  ratingBars: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingLeft: UI_CONSTANTS.spacing.md,
-  },
-  ratingBarText: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
   },
   section: {
     marginTop: UI_CONSTANTS.spacing.md,
   },
   sectionTitle: {
-    ...UI_CONSTANTS.typography.h6,
     color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.h6,
     marginBottom: UI_CONSTANTS.spacing.sm,
   },
   sectionBody: {
-    ...UI_CONSTANTS.typography.body2,
     color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.body2,
     lineHeight: 20,
   },
   buttonsRow: {
+    marginTop: UI_CONSTANTS.spacing.md,
     flexDirection: 'row',
-    marginTop: UI_CONSTANTS.spacing.lg,
     gap: UI_CONSTANTS.spacing.md,
   },
   primaryButton: {
@@ -352,7 +819,6 @@ const styles = StyleSheet.create({
   ghostButton: {
     flex: 1,
     ...UIComponents.getButtonStyle('ghost'),
-    borderWidth: 1,
     borderColor: THEME_COLORS.outline,
   },
   ghostButtonText: {
@@ -371,17 +837,192 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: UI_CONSTANTS.spacing.sm,
-    paddingVertical: UI_CONSTANTS.spacing.xs,
     borderBottomWidth: 1,
+    paddingVertical: UI_CONSTANTS.spacing.xs,
     borderBottomColor: THEME_COLORS.surfaceVariant,
   },
   metaLabel: {
-    ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.caption,
+    fontWeight: '600',
   },
   metaValue: {
-    ...UI_CONSTANTS.typography.body2,
     color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.body2,
+    fontWeight: '600',
+    marginTop: UI_CONSTANTS.spacing.sm,
+  },
+  reviewFormContainer: {
+    backgroundColor: THEME_COLORS.surface,
+    borderRadius: UI_CONSTANTS.borderRadius.md,
+    padding: UI_CONSTANTS.spacing.md,
+  },
+  reviewFormTitle: {
+    color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.subtitle1,
+    marginBottom: UI_CONSTANTS.spacing.sm,
+  },
+  ratingContainer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    borderRadius: UI_CONSTANTS.borderRadius.md,
+    marginBottom: UI_CONSTANTS.spacing.md,
+  },
+  ratingLabel: {
+    color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.body2,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+  },
+  starButton: {
+    padding: UI_CONSTANTS.spacing.xs,
+  },
+  starIcon: {
+    fontSize: 24,
+    color: THEME_COLORS.textSecondary,
+  },
+  starSelected: {
+    color: THEME_COLORS.secondary,
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: THEME_COLORS.outline,
+    borderRadius: UI_CONSTANTS.borderRadius.sm,
+    padding: UI_CONSTANTS.spacing.md,
+    minHeight: 100,
+    ...UI_CONSTANTS.typography.body2,
+    textAlignVertical: 'top',
+  },
+  submitReviewButton: {
+    ...UIComponents.getButtonStyle('primary'),
+    marginTop: UI_CONSTANTS.spacing.md,
+  },
+  submitReviewText: {
+    color: THEME_COLORS.textInverse,
+    fontWeight: '700',
+  },
+  reviewsList: {
+    marginTop: UI_CONSTANTS.spacing.lg,
+  },
+  reviewsListTitle: {
+    color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.subtitle1,
+    fontWeight: '600',
+  },
+  reviewItem: {
+    backgroundColor: THEME_COLORS.surface,
+    borderRadius: UI_CONSTANTS.borderRadius.md,
+    padding: UI_CONSTANTS.spacing.md,
+    marginBottom: UI_CONSTANTS.spacing.md,
+    ...UI_CONSTANTS.elevation[1],
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    marginBottom: UI_CONSTANTS.spacing.xs,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reviewAuthor: {
+    color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.subtitle2,
+    fontWeight: '600',
+  },
+  reviewDate: {
+    color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.caption,
+  },
+  reviewComment: {
+    color: THEME_COLORS.text,
+    ...UI_CONSTANTS.typography.body2,
+    marginTop: UI_CONSTANTS.spacing.sm,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: UI_CONSTANTS.spacing.lg,
+  },
+  loadingText: {
+    color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.body2,
+    marginLeft: UI_CONSTANTS.spacing.sm,
+  },
+  emptyReviewsContainer: {
+    padding: UI_CONSTANTS.spacing.lg,
+    alignItems: 'center',
+  },
+  emptyReviewsText: {
+    color: THEME_COLORS.textSecondary,
+    ...UI_CONSTANTS.typography.body2,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  ratingStarsContainer: {
+    flexDirection: 'row',
+    marginTop: UI_CONSTANTS.spacing.xs,
+  },
+  averageStarFull: {
+    color: THEME_COLORS.secondary,
+    fontSize: 16,
+    marginHorizontal: 1,
+  },
+  averageStarHalf: {
+    color: THEME_COLORS.secondary,
+    fontSize: 16,
+    marginHorizontal: 1,
+    opacity: 0.6,
+  },
+  averageStarEmpty: {
+    color: THEME_COLORS.textSecondary,
+    fontSize: 16,
+    marginHorizontal: 1,
+  },
+  followButton: {
+    backgroundColor: THEME_COLORS.primary,
+    paddingHorizontal: UI_CONSTANTS.spacing.md,
+    paddingVertical: UI_CONSTANTS.spacing.xs,
+    borderRadius: UI_CONSTANTS.borderRadius.sm,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  followingButton: {
+    backgroundColor: THEME_COLORS.surface,
+    borderWidth: 1,
+    borderColor: THEME_COLORS.outline,
+  },
+  followButtonText: {
+    color: THEME_COLORS.textInverse,
+    ...UI_CONSTANTS.typography.caption,
+    fontWeight: '600',
+  },
+  followingButtonText: {
+    color: THEME_COLORS.text,
+  },
+  uploaderLink: {
+    color: THEME_COLORS.primary,
+    textDecorationLine: 'underline',
+  },
+  disabledLink: {
+    color: THEME_COLORS.textSecondary,
+    textDecorationLine: 'none',
+  },
+  overlayBackButton: {
+    position: 'absolute',
+    top: UI_CONSTANTS.spacing.sm + 4,
+    left: UI_CONSTANTS.spacing.sm + 4,
+    zIndex: 50,
+    backgroundColor: THEME_COLORS.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...UI_CONSTANTS.elevation[2],
+  },
+  overlayBackIcon: {
+    color: THEME_COLORS.text,
+    fontSize: 20,
     fontWeight: '600',
   },
 });

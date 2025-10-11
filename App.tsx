@@ -19,11 +19,13 @@ import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import SearchScreen from './src/screens/SearchScreen';
 import UploadScreen from './src/screens/UploadScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MaterialDetailsScreen from './src/screens/MaterialDetailsScreen';
 import MaterialPreviewScreen from './src/screens/MaterialPreviewScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
 import BookmarksScreen from './src/screens/BookmarksScreen';
 import DownloadsScreen from './src/screens/DownloadsScreen';
 import ReadingListScreen from './src/screens/ReadingListScreen';
@@ -86,6 +88,7 @@ function MainTabs() {
     <TNav
       initialRouteName="Home"
       screenOptions={{
+        headerShown: false,
         headerStyle: { backgroundColor: THEME_COLORS.primary },
         headerTintColor: THEME_COLORS.background,
         headerTitleStyle: { fontWeight: 'bold' },
@@ -103,6 +106,7 @@ function MainTabs() {
       }}
     >
       <TScreen name="Home" component={HomeScreen} options={{ title: 'Discover', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🏠</Text>) }} />
+      <TScreen name="Search" component={SearchScreen} options={{ title: 'Search', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🔍</Text>) }} />
       <TScreen name="Upload" component={UploadScreen} options={{ title: 'Upload', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>⬆️</Text>) }} />
       <TScreen name="Library" component={LibraryScreen} options={{ title: 'My Library', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>📚</Text>) }} />
       <TScreen name="Profile" component={ProfileScreen} options={{ title: 'Profile', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>👤</Text>) }} />
@@ -298,10 +302,27 @@ export default function App() {
             const SNav: any = Stack.Navigator;
             const SScreen: any = Stack.Screen;
             return (
-              <SNav screenOptions={{ headerShown: false }}>
+              // Keep headers hidden by default so MainTabs has no top bar,
+              // but enable headers for specific screens below.
+              <SNav
+                screenOptions={{
+                  headerShown: false,
+                  headerStyle: { backgroundColor: THEME_COLORS.primary },
+                  headerTintColor: THEME_COLORS.background,
+                  headerTitleStyle: { fontWeight: '600' },
+                }}
+              >
                 <SScreen name="Main" component={MainTabs} />
-                <SScreen name="MaterialDetails" component={MaterialDetailsScreen} options={{ headerShown: true, title: 'Material' }} />
-                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: true, title: 'Preview' }} />
+                {/* Material details: keep header hidden (we use an in-screen back button) */}
+                <SScreen
+                  name="MaterialDetails"
+                  component={MaterialDetailsScreen}
+                  options={{ headerShown: false, title: 'Material' }}
+                />
+                {/* Preview remains full-screen without header */}
+                <SScreen name="MaterialPreview" component={MaterialPreviewScreen} options={{ headerShown: false, title: 'Preview' }} />
+                {/* User profile: keep header hidden (we use an in-screen back button) */}
+                <SScreen name="UserProfile" component={UserProfileScreen} options={{ headerShown: false, title: 'Profile' }} />
                 <SScreen name="Bookmarks" component={BookmarksScreen} options={{ headerShown: true, title: 'Bookmarks' }} />
                 <SScreen name="Downloads" component={DownloadsScreen} options={{ headerShown: true, title: 'Downloads' }} />
                 <SScreen name="ReadingList" component={ReadingListScreen} options={{ headerShown: true, title: 'Reading List' }} />

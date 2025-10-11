@@ -426,6 +426,9 @@ export const HomeScreen = ({ navigation }: Props) => {
           <Text style={styles.materialTitle} numberOfLines={2}>
             {item.title}
           </Text>
+          <Text style={styles.uploaderInfo}>
+            👤 Uploaded by: {item.uploader_name || 'Unknown'}
+          </Text>
           <View style={styles.materialMeta}>
             <Text style={styles.materialCategory}>{item.category}</Text>
             <Text style={styles.materialSize}>
@@ -852,6 +855,12 @@ const styles = StyleSheet.create({
   materialDate: {
     ...UI_CONSTANTS.typography.caption,
     color: THEME_COLORS.textTertiary,
+  },
+  uploaderInfo: {
+    ...UI_CONSTANTS.typography.caption,
+    color: THEME_COLORS.textSecondary,
+    marginTop: 2,
+    marginBottom: 4,
   },
   bookmarkButton: {
     flexDirection: 'row',
