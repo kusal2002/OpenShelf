@@ -67,8 +67,9 @@ export { supabase };
 
 class SupabaseService {
   private isClientReady: boolean = false;
-  private hfApiKey?: string;
-  private hfModel: string = 'sentence-transformers/all-MiniLM-L6-v2';
+  // AI Content Generation Properties
+  private openRouterApiKey?: string;
+  private openRouterModel: string = 'tngtech/deepseek-r1t2-chimera:free';
 
   constructor() {
     this.isClientReady = supabase && typeof supabase.auth !== 'undefined';
@@ -81,25 +82,11 @@ class SupabaseService {
     let rnEnvKey: string | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      rnEnvKey = require('@env').HUGGINGFACE_API_KEY;
+      rnEnvKey = require('@env').OPENROUTER_API_KEY;
     } catch (_) {
       rnEnvKey = undefined;
     }
-    this.hfApiKey = rnEnvKey || (process.env.HUGGINGFACE_API_KEY as string) || undefined;
-    // Optional: model override via env
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const rnEnvModel = require('@env').HUGGINGFACE_EMBEDDING_MODEL as string | undefined;
-      if (rnEnvModel && typeof rnEnvModel === 'string') {
-        this.hfModel = rnEnvModel;
-      } else if (typeof process.env.HUGGINGFACE_EMBEDDING_MODEL === 'string') {
-        this.hfModel = process.env.HUGGINGFACE_EMBEDDING_MODEL as string;
-      }
-    } catch (_) {
-      if (typeof process.env.HUGGINGFACE_EMBEDDING_MODEL === 'string') {
-        this.hfModel = process.env.HUGGINGFACE_EMBEDDING_MODEL as string;
-      }
-    }
+    this.openRouterApiKey = rnEnvKey || (process.env.OPENROUTER_API_KEY as string) || undefined;
   }
 
   private checkClient(): boolean {
@@ -1727,6 +1714,82 @@ class SupabaseService {
       }
     } catch (error) {
       console.warn('Failed to update follower counts:', error);
+    }
+  }
+
+  /**
+   * Generate AI content using OpenRouter API
+   */
+  async generateAIContent(prompt: string): Promise<ApiResponse<string>> {
+    if (!this.openRouterApiKey) {
+      return {
+        data: null,
+        error: 'OpenRouter API key not configured',
+        success: false
+      };
+    }
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://openshelf.app', // Optional: helps OpenRouter identify your app
+          'X-Title': 'OpenShelf AI Chatbot' // Optional: helps OpenRouter identify your app
+        },
+        body: JSON.stringify({
+          model: this.openRouterModel,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an AI assistant specialized in educational content. Provide comprehensive, accurate, and well-structured educational information. Focus on being helpful, clear, and engaging for students and educators. When explaining concepts, break them down into digestible parts and use examples when appropriate.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+          top_p: 0.9
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: { message: 'Unknown error' } }));
+        return {
+          data: null,
+          error: `OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`,
+          success: false
+        };
+      }
+
+      const data = await response.json();
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        return {
+          data: null,
+          error: 'Invalid response format from OpenRouter API',
+          success: false
+        };
+      }
+
+      const generatedContent = data.choices[0].message.content;
+
+      return {
+        data: generatedContent,
+        error: null,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Error generating AI content:', error);
+      return {
+        data: null,
+        error: error instanceof Error ? error.message : 'Failed to generate AI content',
+        success: false
+      };
     }
   }
 }

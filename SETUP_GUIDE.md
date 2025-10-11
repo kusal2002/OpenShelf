@@ -16,8 +16,15 @@ This guide will help you set up and run the OpenShelf university library mobile 
 ```env
 SUPABASE_URL=https://your-project-url.supabase.co
 SUPABASE_ANON_KEY=your-anon-key-here
+OPENROUTER_API_KEY=your-openrouter-api-key-here
 APP_ENV=development
 ```
+
+2. **Get OpenRouter API Key**:
+   - Go to [openrouter.ai](https://openrouter.ai) and sign up for an account
+   - Navigate to your API keys section and create a new key
+   - Copy the API key and add it to your `.env` file as `OPENROUTER_API_KEY`
+   - The AI chatbot feature uses the `tngtech/deepseek-r1t2-chimera:free` model for educational content generation
 
 ### Step 2: Supabase Backend Setup
 1. Go to [supabase.com](https://supabase.com) and create a new project

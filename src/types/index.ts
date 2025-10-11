@@ -162,7 +162,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Search: undefined;
+  AIChatbot: undefined;
   Upload: undefined;
   Library: undefined;
   Profile: undefined;

@@ -19,7 +19,7 @@ import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import SearchScreen from './src/screens/SearchScreen';
+import AIChatbotScreen from './src/screens/AIChatbotScreen';
 import UploadScreen from './src/screens/UploadScreen';
 import LibraryScreen from './src/screens/LibraryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -42,6 +42,13 @@ import { AuthState, AuthUser } from './src/types';
 // Using untyped navigators to avoid strict param list coupling issues while refactoring
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+// Icon Components (defined outside render to avoid recreation)
+const HomeIcon = ({ color }: { color: string }) => <Text style={[styles.tabIcon, { color }]}>🏠</Text>;
+const AIChatbotIcon = ({ color }: { color: string }) => <Text style={[styles.tabIcon, { color }]}>🤖</Text>;
+const UploadIcon = ({ color }: { color: string }) => <Text style={[styles.tabIcon, { color }]}>⬆️</Text>;
+const LibraryIcon = ({ color }: { color: string }) => <Text style={[styles.tabIcon, { color }]}>📚</Text>;
+const ProfileIcon = ({ color }: { color: string }) => <Text style={[styles.tabIcon, { color }]}>👤</Text>;
 
 // Auth Stack Navigator
 function AuthStack() {
@@ -105,11 +112,11 @@ function MainTabs() {
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
-      <TScreen name="Home" component={HomeScreen} options={{ title: 'Discover', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🏠</Text>) }} />
-      <TScreen name="Search" component={SearchScreen} options={{ title: 'Search', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>🔍</Text>) }} />
-      <TScreen name="Upload" component={UploadScreen} options={{ title: 'Upload', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>⬆️</Text>) }} />
-      <TScreen name="Library" component={LibraryScreen} options={{ title: 'My Library', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>📚</Text>) }} />
-      <TScreen name="Profile" component={ProfileScreen} options={{ title: 'Profile', tabBarIcon: ({ color }: any) => (<Text style={{ color, fontSize: 20 }}>👤</Text>) }} />
+      <TScreen name="Home" component={HomeScreen} options={{ title: 'Discover', tabBarIcon: HomeIcon }} />
+      <TScreen name="AIChatbot" component={AIChatbotScreen} options={{ title: 'AI Assistant', tabBarIcon: AIChatbotIcon }} />
+      <TScreen name="Upload" component={UploadScreen} options={{ title: 'Upload', tabBarIcon: UploadIcon }} />
+      <TScreen name="Library" component={LibraryScreen} options={{ title: 'My Library', tabBarIcon: LibraryIcon }} />
+      <TScreen name="Profile" component={ProfileScreen} options={{ title: 'Profile', tabBarIcon: ProfileIcon }} />
     </TNav>
   );
 }
@@ -379,5 +386,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: THEME_COLORS.textSecondary,
     textAlign: 'center',
+  },
+  tabIcon: {
+    fontSize: 20,
   },
 });

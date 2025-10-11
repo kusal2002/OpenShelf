@@ -6,11 +6,12 @@ OpenShelf is a React Native CLI mobile application that allows university studen
 
 ### Core Features
 - 📚 **Study Material Management**: Upload and organize PDFs, DOCs, and DOCX files
-- 🔍 **Smart Search**: Find materials by title, category, tags, or content
+- 🤖 **AI Chatbot**: Get educational content and explanations using AI (OpenRouter integration)
 - 📱 **Offline Support**: Access cached materials without internet connection
 - 👥 **User Profiles**: Manage personal information and track contributions
 - 📊 **Analytics**: Track uploads, downloads, and popular materials
 - 🔒 **Authentication**: Secure login/signup with email verification
+- 💾 **Document Export**: Save AI-generated content as PDF files
 
 ### Advanced Features (Future Implementation)
 - 📖 **Online/Offline Reading**: Built-in PDF viewer with reading progress tracking
@@ -24,11 +25,13 @@ OpenShelf is a React Native CLI mobile application that allows university studen
 
 - **Frontend**: React Native CLI with TypeScript
 - **Backend**: Supabase (PostgreSQL, Authentication, Storage)
+- **AI Integration**: OpenRouter API (DeepSeek model for educational content)
 - **Navigation**: React Navigation 7
 - **State Management**: React Hooks + Context (future: Redux Toolkit)
 - **Offline Storage**: AsyncStorage + React Native FS
 - **Network Detection**: NetInfo
 - **File Handling**: React Native Document Picker
+- **PDF Generation**: React Native FS + Share API
 - **Styling**: StyleSheet (Custom Design System)
 
 ## Prerequisites
