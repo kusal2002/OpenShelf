@@ -8,14 +8,15 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
-  TextInput,
   Alert,
   Dimensions,
   ScrollView,
+  Animated,
+  TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -41,12 +42,23 @@ import {
   FILE_ICONS,
 } from '../utils';
 import { FloatingAction } from "react-native-floating-action";
+import { useTheme } from '../theme/ThemeProvider';
+import {
+  HeaderGreeting,
+  SearchBar,
+  CategoryPill,
+  SectionHeader,
+  CoverCard,
+  StatsBar,
+  PromoCard,
+} from '../components/ui';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 type Props = NativeStackScreenProps<MainTabParamList, 'Home'>;
 
 export const HomeScreen = ({ navigation }: Props) => {
+  const { theme, isDark, toggleTheme } = useTheme();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [filteredMaterials, setFiltereredMaterials] = useState<Material[]>([]);
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({});
@@ -59,6 +71,20 @@ export const HomeScreen = ({ navigation }: Props) => {
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ name: string; avatar_url?: string } | null>(null);
+  
+  // Sticky header state
+  const [currentVisibleCategory, setCurrentVisibleCategory] = useState<string>('');
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const sectionPositions = React.useRef<{ [key: string]: number }>({});
+  const stickyHeaderOpacity = React.useRef(new Animated.Value(0)).current;
+  const stickyHeaderTranslateY = React.useRef(new Animated.Value(-60)).current;
+  const searchInputRef = React.useRef<TextInput>(null);
+  
+  // Animation values
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const slideAnim = React.useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
     const unsubscribe = NetworkUtils.subscribeToNetworkStatus(setIsOnline);
@@ -68,6 +94,21 @@ export const HomeScreen = ({ navigation }: Props) => {
   useEffect(() => {
     loadMaterials(true);
     loadUserBookmarks();
+    loadCurrentUser();
+    
+    // Start entry animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
   
   // Add focus listener to refresh bookmark status
@@ -84,6 +125,34 @@ export const HomeScreen = ({ navigation }: Props) => {
     filterMaterials();
   }, [materials, searchQuery, selectedCategory]);
   
+  // Load current user info
+  const loadCurrentUser = useCallback(async () => {
+    try {
+      const { session } = await supabaseService.getCurrentSession();
+      if (session) {
+        const userId = session.user.id;
+        
+        // Fetch user profile from database to get the actual name
+        const { data: userProfile } = await supabaseService.getUserProfile(userId);
+        
+        if (userProfile) {
+          setCurrentUser({
+            name: userProfile.name || userProfile.full_name || 'Student',
+            avatar_url: userProfile.avatar_url || session.user.user_metadata?.avatar_url,
+          });
+        } else {
+          // Fallback to session metadata if profile not found
+          setCurrentUser({
+            name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || 'Student',
+            avatar_url: session.user.user_metadata?.avatar_url,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+    }
+  }, []);
+
   // Load the user's bookmarks
   const loadUserBookmarks = useCallback(async () => {
     try {
@@ -323,183 +392,195 @@ export const HomeScreen = ({ navigation }: Props) => {
     }
   };
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <Text style={styles.title}>🏠 OpenShelf Library</Text>
-      <Text style={styles.subtitle}>
-        Discover and download study materials shared by the university community
-      </Text>
-      
-      {!isOnline && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>
-            📱 You're browsing offline content
-          </Text>
-        </View>
-      )}
-    </View>
-  );
 
-  const renderSearchBar = () => (
-    <View style={styles.searchContainer}>
-      <View style={styles.searchBar}>
-        <Text style={styles.searchIcon}>🔍</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search materials, topics, or tags..."
-          placeholderTextColor={THEME_COLORS.textTertiary}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity
-            style={styles.clearButton}
-            onPress={() => setSearchQuery('')}
-          >
-            <Text style={styles.clearButtonText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
 
-  const renderCategoryFilters = () => (
-    <View style={styles.categoriesContainer}>
+  const renderCategoryFilters = () => {
+    const categoryConfig = [
+      { label: 'All', value: null, icon: '📚' },
+      { label: 'CS', value: 'Computer Science' as MaterialCategory, icon: '💻' },
+      { label: 'Math', value: 'Mathematics' as MaterialCategory, icon: '📊' },
+      { label: 'Physics', value: 'Physics' as MaterialCategory, icon: '⚛️' },
+      { label: 'Chemistry', value: 'Chemistry' as MaterialCategory, icon: '🧪' },
+      { label: 'Biology', value: 'Biology' as MaterialCategory, icon: '🧬' },
+      { label: 'Literature', value: 'Literature' as MaterialCategory, icon: '📖' },
+      { label: 'History', value: 'History' as MaterialCategory, icon: '�' },
+      { label: 'Economics', value: 'Economics' as MaterialCategory, icon: '📈' },
+      { label: 'Psychology', value: 'Psychology' as MaterialCategory, icon: '🧠' },
+      { label: 'Engineering', value: 'Engineering' as MaterialCategory, icon: '⚙️' },
+      { label: 'Medicine', value: 'Medicine' as MaterialCategory, icon: '⚕️' },
+      { label: 'Other', value: 'Other' as MaterialCategory, icon: '�' },
+    ];
+
+    return (
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.categoriesContent}
       >
-        <TouchableOpacity
-          style={[styles.categoryChip, !selectedCategory && styles.categoryChipActive]}
-          onPress={() => setSelectedCategory(null)}
-        >
-          <Text style={[
-            styles.categoryChipText, 
-            !selectedCategory && styles.categoryChipTextActive
-          ]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        
-        {MATERIAL_CATEGORIES.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryChip, 
-              selectedCategory === category && styles.categoryChipActive
-            ]}
-            onPress={() => setSelectedCategory(
-              selectedCategory === category ? null : category
-            )}
-          >
-            <Text style={[
-              styles.categoryChipText,
-              selectedCategory === category && styles.categoryChipTextActive
-            ]}>
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {categoryConfig.map((cat) => {
+          // Calculate count for each category
+          const count = cat.value === null 
+            ? materials.length 
+            : materials.filter(m => m.category === cat.value).length;
+          
+          return (
+            <CategoryPill
+              key={cat.label}
+              label={cat.label}
+              icon={cat.icon}
+              isActive={selectedCategory === cat.value}
+              count={count}
+              onPress={() => setSelectedCategory(
+                selectedCategory === cat.value ? null : cat.value
+              )}
+            />
+          );
+        })}
       </ScrollView>
-    </View>
-  );
+    );
+  };
 
-  const renderMaterialCard = ({ item }: { item: Material }) => (
-    <TouchableOpacity
-      style={styles.materialCard}
-      activeOpacity={0.9}
-      onPress={() => navigation.navigate('MaterialDetails' as any, { material: item } as any)}
-    >
-      <View style={styles.materialHeader}>
-        <View style={styles.materialIcon}>
-          <Text style={styles.materialIconText}>
-            {FILE_ICONS[item.file_type as keyof typeof FILE_ICONS] || '📄'}
-          </Text>
-          {item.is_bookmarked && (
-            <View style={styles.bookmarkIconContainer}>
-              <Text style={styles.bookmarkIconText}>🔖</Text>
-            </View>
+  const renderSubjectSections = () => {
+    const subjectData = MATERIAL_CATEGORIES.map(category => ({
+      name: category,
+      materials: filteredMaterials.filter(m => m.category === category)
+    })).filter(subject => subject.materials.length > 0);
+
+    return subjectData.map((subject, index) => (
+      <View 
+        key={subject.name} 
+        style={styles.subjectSection}
+        onLayout={(event) => {
+          const { y } = event.nativeEvent.layout;
+          sectionPositions.current[subject.name] = y;
+        }}
+      >
+        <SectionHeader
+          title={subject.name}
+          subtitle={`${subject.materials.length} materials`}
+          onActionPress={() => {
+            setSelectedCategory(subject.name as MaterialCategory);
+          }}
+        />
+        
+        <FlatList
+          data={subject.materials.slice(0, 6)} // Show max 6 items
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.horizontalList}
+          renderItem={({ item }) => (
+            <CoverCard
+              material={item}
+              onPress={() => navigation.navigate('MaterialDetails' as any, { material: item } as any)}
+              onBookmarkPress={() => toggleBookmark(item)}
+            />
           )}
-        </View>
-        <View style={styles.materialInfo}>
-          <Text style={styles.materialTitle} numberOfLines={2}>
-            {item.title}
+          getItemLayout={(data, index) => ({
+            length: 176, // width + margin
+            offset: 176 * index,
+            index,
+          })}
+        />
+      </View>
+    ));
+  };
+
+
+
+  // Handle scroll to update sticky header
+  const handleScroll = (event: any) => {
+    const scrollPosition = event.nativeEvent.contentOffset.y;
+    
+    // Show sticky header after scrolling past the main header (approximately 200px)
+    const shouldShow = scrollPosition > 200;
+    
+    if (shouldShow !== showStickyHeader) {
+      setShowStickyHeader(shouldShow);
+      
+      // Animate sticky header appearance
+      Animated.parallel([
+        Animated.timing(stickyHeaderOpacity, {
+          toValue: shouldShow ? 1 : 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(stickyHeaderTranslateY, {
+          toValue: shouldShow ? 0 : -60,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+    
+    // Find which category section is currently visible
+    const positions = Object.entries(sectionPositions.current);
+    for (let i = positions.length - 1; i >= 0; i--) {
+      const [category, position] = positions[i];
+      if (scrollPosition >= position - 100) {
+        setCurrentVisibleCategory(category);
+        break;
+      }
+    }
+  };
+
+  // Render sticky header
+  const renderStickyHeader = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.stickyHeader,
+          {
+            backgroundColor: theme.surface,
+            borderBottomColor: theme.border,
+            shadowColor: theme.shadow,
+            opacity: stickyHeaderOpacity,
+            transform: [{ translateY: stickyHeaderTranslateY }],
+          }
+        ]}
+        pointerEvents={showStickyHeader ? 'auto' : 'none'}
+      >
+        <View style={styles.stickyHeaderContent}>
+          <Text style={[styles.stickyHeaderTitle, { color: theme.text }]} numberOfLines={1}>
+            {currentVisibleCategory || 'Browse Materials'}
           </Text>
-          <Text style={styles.uploaderInfo}>
-            👤 Uploaded by: {item.uploader_name || 'Unknown'}
-          </Text>
-          <View style={styles.materialMeta}>
-            <Text style={styles.materialCategory}>{item.category}</Text>
-            <Text style={styles.materialSize}>
-              {FileUtils.formatFileSize(item.file_size)}
-            </Text>
-            {item.is_bookmarked && (
-              <Text style={styles.bookmarkText}>Bookmarked</Text>
-            )}
+          <View style={styles.stickyHeaderActions}>
+            <TouchableOpacity
+              style={[styles.stickyHeaderButton, { backgroundColor: theme.surfaceVariant }]}
+              onPress={() => {
+                // Focus on main search input
+                if (searchInputRef.current) {
+                  searchInputRef.current.focus();
+                }
+              }}
+            >
+              <Text style={styles.stickyHeaderIcon}>🔍</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.stickyHeaderButton, { backgroundColor: theme.surfaceVariant }]}
+              onPress={() => {
+                Alert.alert('Notifications', 'You have no new notifications.');
+              }}
+            >
+              <Text style={styles.stickyHeaderIcon}>🔔</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </View>
-
-      {item.description && (
-        <Text style={styles.materialDescription} numberOfLines={3}>
-          {item.description}
-        </Text>
-      )}
-
-      {item.tags && item.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {item.tags.slice(0, 3).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-            </View>
-          ))}
-          {item.tags.length > 3 && (
-            <Text style={styles.moreTagsText}>+{item.tags.length - 3} more</Text>
-          )}
-        </View>
-      )}
-
-      <View style={styles.materialFooter}>
-        <View style={styles.leftActions}>
-          <Text style={styles.materialDate}>
-            {DateUtils.getRelativeTime(item.created_at)}
-          </Text>
-          <TouchableOpacity 
-            style={[
-              styles.bookmarkButton,
-              item.is_bookmarked ? styles.bookmarkButtonActive : {}
-            ]} 
-            onPress={() => toggleBookmark(item)}
-          >
-            <Text style={styles.bookmarkButtonIcon}>
-              {item.is_bookmarked ? '🔖' : '📑'}
-            </Text>
-            <Text style={styles.bookmarkButtonText}>
-              {item.is_bookmarked ? 'Bookmarked' : 'Bookmark'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.downloadInfo}>
-          <Text style={styles.downloadCount}>📥 {item.download_count || 0}</Text>
-          <TouchableOpacity style={styles.downloadButton} onPress={() => downloadMaterial(item)}>
-            <Text style={styles.downloadButtonText}>Download</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </Animated.View>
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateIcon}>📚</Text>
-      <Text style={styles.emptyStateTitle}>
+      <Text style={[styles.emptyStateTitle, { color: theme.text }]}>
         {searchQuery || selectedCategory 
           ? 'No materials found' 
           : 'No materials available'
         }
       </Text>
-      <Text style={styles.emptyStateSubtitle}>
+      <Text style={[styles.emptyStateSubtitle, { color: theme.textSecondary }]}>
         {searchQuery || selectedCategory
           ? 'Try adjusting your search or filters'
           : isOnline 
@@ -508,8 +589,11 @@ export const HomeScreen = ({ navigation }: Props) => {
         }
       </Text>
       {!isOnline && (
-        <TouchableOpacity style={styles.retryButton} onPress={() => loadMaterials(true)}>
-          <Text style={styles.retryButtonText}>Try Again</Text>
+        <TouchableOpacity 
+          style={[styles.retryButton, { backgroundColor: theme.primary }]} 
+          onPress={() => loadMaterials(true)}
+        >
+          <Text style={[styles.retryButtonText, { color: theme.textInverse }]}>Try Again</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -518,41 +602,20 @@ export const HomeScreen = ({ navigation }: Props) => {
   const renderLoadingMore = () => (
     isLoadingMore && (
       <View style={styles.loadingMore}>
-        <ActivityIndicator color={THEME_COLORS.primary} />
-        <Text style={styles.loadingMoreText}>Loading more materials...</Text>
+        <ActivityIndicator color={theme.primary} />
+        <Text style={[styles.loadingMoreText, { color: theme.textSecondary }]}>Loading more materials...</Text>
       </View>
     )
   );
 
-  const renderStats = () => (
-    <View style={styles.statsContainer}>
-      <View style={styles.statItem}>
-        <Text style={styles.statNumber}>{filteredMaterials.length}</Text>
-        <Text style={styles.statLabel}>Materials</Text>
-      </View>
-      <View style={styles.statDivider} />
-      <View style={styles.statItem}>
-        <Text style={styles.statNumber}>
-          {filteredMaterials.reduce((sum, material) => sum + (material.download_count || 0), 0)}
-        </Text>
-        <Text style={styles.statLabel}>Downloads</Text>
-      </View>
-      <View style={styles.statDivider} />
-      <View style={styles.statItem}>
-        <Text style={styles.statNumber}>
-          {new Set(filteredMaterials.map(m => m.category)).size}
-        </Text>
-        <Text style={styles.statLabel}>Categories</Text>
-      </View>
-    </View>
-  );
+
 
   if (loadingState === 'loading') {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={THEME_COLORS.primary} />
-          <Text style={styles.loadingText}>Loading study materials...</Text>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading study materials...</Text>
         </View>
       </SafeAreaView>
     );
@@ -560,60 +623,109 @@ export const HomeScreen = ({ navigation }: Props) => {
 
   if (loadingState === 'error' && materials.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Unable to load materials</Text>
-          <Text style={styles.errorSubtitle}>
+          <Text style={[styles.errorTitle, { color: theme.text }]}>Unable to load materials</Text>
+          <Text style={[styles.errorSubtitle, { color: theme.textSecondary }]}>
             {isOnline 
               ? 'There was a problem loading the study materials. Please try again.'
               : 'You appear to be offline. Please check your internet connection.'
             }
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => loadMaterials(true)}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: theme.primary }]} 
+            onPress={() => loadMaterials(true)}
+          >
+            <Text style={[styles.retryButtonText, { color: theme.textInverse }]}>Try Again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   };
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={filteredMaterials}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMaterialCard}
-        ListHeaderComponent={
-          <View>
-            {renderHeader()}
-            {renderSearchBar()}
-            {renderCategoryFilters()}
-            {renderStats()}
-          </View>
-        }
-        ListEmptyComponent={renderEmptyState}
-        ListFooterComponent={renderLoadingMore}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[THEME_COLORS.primary]}
-            tintColor={THEME_COLORS.primary}
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <Animated.View 
+        style={[
+          styles.animatedContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }
+        ]}
+      >
+        <ScrollView
+          style={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.primary]}
+              tintColor={theme.primary}
+            />
+          }
+        >
+          {/* Header with greeting and theme toggle */}
+          <HeaderGreeting
+            userName={currentUser?.name}
+            avatarUrl={currentUser?.avatar_url}
+            onThemeToggle={toggleTheme}
+            onNotificationPress={() => {
+              Alert.alert('Notifications', 'You have no new notifications.');
+            }}
+            onAvatarPress={() => {
+              navigation.navigate('Profile' as any);
+            }}
+            isDark={isDark}
+            notificationCount={0}
           />
-        }
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.1}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      />
 
-      {/* floating action button for uploading new materials */}
+          {/* Search bar */}
+          <SearchBar
+            ref={searchInputRef}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFilterPress={() => {
+              Alert.alert('Filters', 'Advanced filtering options coming soon!');
+            }}
+          />
 
+          {/* New for You promo card */}
+          <PromoCard
+            onPress={() => {
+              Alert.alert('Coming Soon', 'Personalized recommendations are on the way!');
+            }}
+          />
+
+          {/* Categories */}
+          <SectionHeader title="Categories" subtitle="Browse by subject" />
+          {renderCategoryFilters()}
+
+          {/* Subject sections */}
+          {renderSubjectSections()}
+
+          {/* Empty state for filtered results */}
+          {filteredMaterials.length === 0 && !refreshing && loadingState === 'success' && (
+            renderEmptyState()
+          )}
+
+          {/* Loading more indicator */}
+          {renderLoadingMore()}
+        </ScrollView>
+      </Animated.View>
+
+      {/* Sticky Header */}
+      {renderStickyHeader()}
+
+      {/* Floating action button */}
       <FloatingAction
         actions={[]}
         onPressMain={() => navigation.navigate('Upload')}
-        color={THEME_COLORS.primary}
-        floatingIcon={<Text style={{ color: THEME_COLORS.white, fontSize: 24 }}>+</Text>}
+        color={theme.primary}
+        floatingIcon={<Text style={{ color: theme.textInverse, fontSize: 24 }}>+</Text>}
       />
     </SafeAreaView>
   );
@@ -622,380 +734,138 @@ export const HomeScreen = ({ navigation }: Props) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: THEME_COLORS.background,
   },
-  listContent: {
-    flexGrow: 1,
-  },
-  header: {
-    padding: UI_CONSTANTS.spacing.lg,
-    paddingBottom: UI_CONSTANTS.spacing.md,
-  },
-  title: {
-    ...UI_CONSTANTS.typography.h2,
-    color: THEME_COLORS.text,
-    marginBottom: UI_CONSTANTS.spacing.xs,
-  },
-  subtitle: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
-    lineHeight: 22,
-  },
-  offlineBanner: {
-    backgroundColor: THEME_COLORS.warningLight,
-    padding: UI_CONSTANTS.spacing.sm,
-    borderRadius: UI_CONSTANTS.borderRadius.sm,
-    marginTop: UI_CONSTANTS.spacing.md,
-  },
-  offlineBannerText: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.text,
-    textAlign: 'center',
-  },
-  searchContainer: {
-    paddingHorizontal: UI_CONSTANTS.spacing.lg,
-    paddingBottom: UI_CONSTANTS.spacing.md,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: THEME_COLORS.surface,
-    borderRadius: UI_CONSTANTS.borderRadius.lg,
-    paddingHorizontal: UI_CONSTANTS.spacing.md,
-    ...UI_CONSTANTS.elevation[1],
-  },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: UI_CONSTANTS.spacing.sm,
-  },
-  searchInput: {
+  animatedContainer: {
     flex: 1,
-    ...UI_CONSTANTS.typography.body1,
-    color: THEME_COLORS.text,
-    paddingVertical: UI_CONSTANTS.spacing.md,
   },
-  clearButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: THEME_COLORS.outline,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearButtonText: {
-    fontSize: 14,
-    color: THEME_COLORS.textSecondary,
-  },
-  categoriesContainer: {
-    paddingBottom: UI_CONSTANTS.spacing.md,
+  scrollContainer: {
+    flex: 1,
   },
   categoriesContent: {
-    paddingHorizontal: UI_CONSTANTS.spacing.lg,
-    gap: UI_CONSTANTS.spacing.sm,
+    paddingHorizontal: 20,
+    gap: 12,
   },
-  categoryChip: {
-    paddingHorizontal: UI_CONSTANTS.spacing.md,
-    paddingVertical: UI_CONSTANTS.spacing.sm,
-    backgroundColor: THEME_COLORS.surface,
-    borderRadius: UI_CONSTANTS.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: THEME_COLORS.outline,
-    ...UI_CONSTANTS.elevation[1],
+  subjectSection: {
+    marginBottom: 24,
   },
-  categoryChipActive: {
-    backgroundColor: THEME_COLORS.primary,
-    borderColor: THEME_COLORS.primary,
-  },
-  categoryChipText: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.text,
-    fontWeight: '500',
-  },
-  categoryChipTextActive: {
-    color: THEME_COLORS.textInverse,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: THEME_COLORS.surface,
-    marginHorizontal: UI_CONSTANTS.spacing.lg,
-    marginBottom: UI_CONSTANTS.spacing.lg,
-    borderRadius: UI_CONSTANTS.borderRadius.md,
-    padding: UI_CONSTANTS.spacing.lg,
-    ...UI_CONSTANTS.elevation[2],
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    ...UI_CONSTANTS.typography.h4,
-    color: THEME_COLORS.primary,
-    fontWeight: 'bold',
-    marginBottom: UI_CONSTANTS.spacing.xs,
-  },
-  statLabel: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
-    textTransform: 'uppercase',
-    fontWeight: '500',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: THEME_COLORS.outline,
-    marginHorizontal: UI_CONSTANTS.spacing.md,
-  },
-  materialCard: {
-    ...UIComponents.getCardStyle(2),
-    marginHorizontal: UI_CONSTANTS.spacing.lg,
-    marginBottom: UI_CONSTANTS.spacing.md,
-  },
-  materialHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: UI_CONSTANTS.spacing.sm,
-  },
-  materialIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: UI_CONSTANTS.borderRadius.sm,
-    backgroundColor: THEME_COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: UI_CONSTANTS.spacing.md,
-  },
-  materialIconText: {
-    fontSize: 24,
-  },
-  materialInfo: {
-    flex: 1,
-  },
-  materialTitle: {
-    ...UI_CONSTANTS.typography.h6,
-    color: THEME_COLORS.text,
-    fontWeight: '600',
-    marginBottom: UI_CONSTANTS.spacing.xs,
-  },
-  materialMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: UI_CONSTANTS.spacing.sm,
-  },
-  materialCategory: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.primary,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-  },
-  materialSize: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textTertiary,
-  },
-  bookmarkIconContainer: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: THEME_COLORS.background,
-    borderRadius: 12,
-    padding: 2,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-  },
-  bookmarkIconText: {
-    fontSize: 16,
-  },
-  bookmarkText: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.warning,
-    marginLeft: UI_CONSTANTS.spacing.xs,
-    fontWeight: '500',
-  },
-  materialDescription: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: UI_CONSTANTS.spacing.sm,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginBottom: UI_CONSTANTS.spacing.sm,
-    gap: UI_CONSTANTS.spacing.xs,
-  },
-  tag: {
-    backgroundColor: THEME_COLORS.surfaceVariant,
-    paddingHorizontal: UI_CONSTANTS.spacing.sm,
-    paddingVertical: UI_CONSTANTS.spacing.xs,
-    borderRadius: UI_CONSTANTS.borderRadius.sm,
-  },
-  tagText: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
-    fontWeight: '500',
-  },
-  moreTagsText: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textTertiary,
-    fontStyle: 'italic',
-  },
-  materialFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: UI_CONSTANTS.spacing.xs,
-  },
-  leftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: UI_CONSTANTS.spacing.sm,
-  },
-  materialDate: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textTertiary,
-  },
-  uploaderInfo: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  bookmarkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: UI_CONSTANTS.spacing.xs,
-    paddingHorizontal: UI_CONSTANTS.spacing.sm,
-    backgroundColor: THEME_COLORS.surfaceVariant,
-    borderRadius: UI_CONSTANTS.borderRadius.md,
-    gap: 4,
-  },
-  bookmarkButtonActive: {
-    backgroundColor: THEME_COLORS.primary + '20',
-  },
-  bookmarkButtonIcon: {
-    fontSize: 18,
-  },
-  bookmarkButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: THEME_COLORS.textSecondary,
-  },
-  downloadInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: UI_CONSTANTS.spacing.sm,
-  },
-  downloadCount: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textSecondary,
-  },
-  downloadButton: {
-    backgroundColor: THEME_COLORS.primary,
-    paddingHorizontal: UI_CONSTANTS.spacing.md,
-    paddingVertical: UI_CONSTANTS.spacing.xs,
-    borderRadius: UI_CONSTANTS.borderRadius.sm,
-  },
-  downloadButtonText: {
-    ...UI_CONSTANTS.typography.caption,
-    color: THEME_COLORS.textInverse,
-    fontWeight: '600',
+  horizontalList: {
+    paddingHorizontal: 20,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: UI_CONSTANTS.spacing.xxl,
+    padding: 40,
+    marginTop: 40,
   },
   emptyStateIcon: {
     fontSize: 64,
-    marginBottom: UI_CONSTANTS.spacing.lg,
+    marginBottom: 20,
   },
   emptyStateTitle: {
-    ...UI_CONSTANTS.typography.h5,
-    color: THEME_COLORS.text,
+    fontSize: 20,
+    fontWeight: '600',
     textAlign: 'center',
-    marginBottom: UI_CONSTANTS.spacing.sm,
+    marginBottom: 8,
   },
   emptyStateSubtitle: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
+    fontSize: 16,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: UI_CONSTANTS.spacing.lg,
+    marginBottom: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: UI_CONSTANTS.spacing.xxl,
+    padding: 40,
   },
   loadingText: {
-    ...UI_CONSTANTS.typography.body1,
-    color: THEME_COLORS.textSecondary,
-    marginTop: UI_CONSTANTS.spacing.md,
+    fontSize: 16,
+    marginTop: 16,
   },
   errorContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: UI_CONSTANTS.spacing.xxl,
+    padding: 40,
   },
   errorIcon: {
     fontSize: 64,
-    marginBottom: UI_CONSTANTS.spacing.lg,
+    marginBottom: 20,
   },
   errorTitle: {
-    ...UI_CONSTANTS.typography.h5,
-    color: THEME_COLORS.text,
+    fontSize: 20,
+    fontWeight: '600',
     textAlign: 'center',
-    marginBottom: UI_CONSTANTS.spacing.sm,
+    marginBottom: 8,
   },
   errorSubtitle: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
+    fontSize: 16,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: UI_CONSTANTS.spacing.lg,
-  },
-  retryButton: {
-    ...UIComponents.getButtonStyle('primary'),
-    backgroundColor: THEME_COLORS.primary,
-    paddingHorizontal: UI_CONSTANTS.spacing.xl,
-  },
-  retryButtonText: {
-    ...UI_CONSTANTS.typography.body1,
-    color: THEME_COLORS.textInverse,
-    fontWeight: '600',
+    marginBottom: 24,
   },
   loadingMore: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: UI_CONSTANTS.spacing.lg,
-    gap: UI_CONSTANTS.spacing.sm,
+    padding: 20,
+    gap: 8,
   },
   loadingMoreText: {
-    ...UI_CONSTANTS.typography.body2,
-    color: THEME_COLORS.textSecondary,
+    fontSize: 14,
   },
-  fab: {
+  stickyHeader: {
     position: 'absolute',
-    right: UI_CONSTANTS.spacing.lg,
-    bottom: UI_CONSTANTS.spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: THEME_COLORS.primary,
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingTop: 18,
+    borderBottomWidth: 1,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  stickyHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stickyHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+    marginRight: 12,
+  },
+  stickyHeaderActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  stickyHeaderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    ...UI_CONSTANTS.elevation[3],
   },
-  fabIcon: {
-    color: THEME_COLORS.textInverse,
-    fontSize: 28,
-    lineHeight: 28,
-    marginTop: -1,
+  stickyHeaderIcon: {
+    fontSize: 16,
   },
 });
 export default HomeScreen;

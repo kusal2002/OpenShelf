@@ -14,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 // Services and utilities
 import { supabaseService, onAuthStateChange } from './src/services/supabase';
 import { NetworkUtils, ErrorHandler, THEME_COLORS } from './src/utils';
+import { ThemeProvider } from './src/theme/ThemeProvider';
 
 // Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -275,11 +276,13 @@ export default function App() {
   if (authState.loading || onboardingComplete === null) {
     return (
       <SafeAreaProvider>
-        <StatusBar
-          barStyle="dark-content"
-          backgroundColor={THEME_COLORS.background}
-        />
-        <LoadingScreen />
+        <ThemeProvider>
+          <StatusBar
+            barStyle="dark-content"
+            backgroundColor={THEME_COLORS.background}
+          />
+          <LoadingScreen />
+        </ThemeProvider>
       </SafeAreaProvider>
     );
   }
@@ -289,11 +292,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={THEME_COLORS.background}
-      />
-      <NavigationContainer>
+      <ThemeProvider>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor={THEME_COLORS.background}
+        />
+        <NavigationContainer>
         {authState.isAuthenticated ? (
           (() => {
             const SNav: any = Stack.Navigator;
@@ -330,6 +334,7 @@ export default function App() {
           onboardingComplete ? <AuthStack /> : <OnboardingStack />
         )}
       </NavigationContainer>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
